@@ -28,6 +28,19 @@ export interface LogEntry {
   ts: number;
 }
 
+export interface GameSettings {
+  dice: boolean;
+  special: boolean;
+  sound: boolean;
+  voice: boolean;
+}
+
+export interface DiceRoll {
+  a: number;
+  b: number;
+  special: string | null;
+}
+
 export interface GameState {
   id: string;
   code: string;
@@ -35,6 +48,15 @@ export interface GameState {
   players: RuntimePlayer[];
   turnIndex: number;
   log: LogEntry[];
+  settings: GameSettings;
+  dice: DiceRoll | null;
+}
+
+export const DEFAULT_SETTINGS: GameSettings = { dice: true, special: true, sound: true, voice: true };
+
+/** Rellena campos nuevos en estados antiguos (localStorage / remoto). */
+export function hydrate(s: GameState): GameState {
+  return { ...s, settings: { ...DEFAULT_SETTINGS, ...(s.settings ?? {}) }, dice: s.dice ?? null };
 }
 
 export type Action =
@@ -59,14 +81,28 @@ export type Action =
       aProps: string[]; // propiedades que A entrega a B
       bProps: string[]; // propiedades que B entrega a A
     }
+  | { type: 'ROLL_DICE' }
+  | { type: 'SET_SETTINGS'; patch: Partial<GameSettings> }
   | { type: 'NEXT_TURN' }
   | { type: 'REPLACE'; state: GameState }; // para sincronización (Realtime)
+
+const SPECIAL_FACES = ['🎲 dado 1', '🎲 dado 2', '➕ suma', '✖️ dobles', '🔁 relanza', '🚫 pierde turno', '➕6 bonus'];
+const d6 = () => Math.floor(Math.random() * 6) + 1;
 
 let counter = 0;
 const uid = () => `${Date.now().toString(36)}${(counter++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 export function createGame(code: string, currencySymbol = '$'): GameState {
-  return { id: uid(), code, currencySymbol, players: [], turnIndex: 0, log: [] };
+  return {
+    id: uid(),
+    code,
+    currencySymbol,
+    players: [],
+    turnIndex: 0,
+    log: [],
+    settings: { ...DEFAULT_SETTINGS },
+    dice: null,
+  };
 }
 
 /** Vista de tenencias de un jugador para los cálculos de patrimonio. */
@@ -311,10 +347,29 @@ export function reducer(s: GameState, a: Action): GameState {
       return { ...s, players, log: log(s, `Negociación ${A.name} ↔ ${B.name}: ${detail}`) };
     }
 
+    case 'ROLL_DICE': {
+      const a = d6();
+      const b = d6();
+      const special = s.settings.special ? SPECIAL_FACES[Math.floor(Math.random() * SPECIAL_FACES.length)] : null;
+      const txt = `🎲 ${a} + ${b} = ${a + b}${special ? ` · ${special}` : ''}`;
+      return { ...s, dice: { a, b, special }, log: log(s, txt) };
+    }
+
+    case 'SET_SETTINGS':
+      return { ...s, settings: { ...s.settings, ...a.patch } };
+
     case 'NEXT_TURN': {
+      if (s.players.length === 0) return s;
       const active = s.players.filter((p) => !p.bankrupt);
       if (active.length === 0) return s;
-      return { ...s, turnIndex: (s.turnIndex + 1) % s.players.length };
+      // Avanza al siguiente jugador no en bancarrota.
+      let idx = s.turnIndex;
+      for (let i = 0; i < s.players.length; i++) {
+        idx = (idx + 1) % s.players.length;
+        if (!s.players[idx].bankrupt) break;
+      }
+      const next = s.players[idx];
+      return { ...s, turnIndex: idx, dice: null, log: log(s, `Es el turno de ${next.name}`) };
     }
 
     case 'REPLACE':

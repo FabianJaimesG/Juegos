@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
-import { type Action, createGame, type GameState, reducer } from './engine';
+import { type Action, createGame, type GameState, hydrate, reducer } from './engine';
 
 const STORAGE_KEY = 'banca:v2';
 
@@ -11,7 +11,7 @@ function genCode(): string {
 function init(): GameState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as GameState;
+    if (raw) return hydrate(JSON.parse(raw) as GameState);
   } catch {
     /* ignora */
   }

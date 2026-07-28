@@ -1,18 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { PropertyCard } from './components/PropertyCard';
+import { WealthChart } from './components/WealthChart';
 import { BOARD, getProperty } from './domain/board';
 import {
   bankBuildingsLeft,
   createGame,
+  type GameSettings,
   playerBuildings,
   playerEquity,
   playerNetWorth,
   type RuntimePlayer,
 } from './game/engine';
 import { canBuildOn } from './domain/wealth';
+import { blip, speak } from './game/feedback';
 import { useGame } from './game/useGame';
 import { useRealtimeSync } from './game/sync';
+import { useWealthHistory } from './game/useWealthHistory';
 import { hasSupabase } from './lib/supabase';
 
 const PLAYER_COLORS = ['#e11d48', '#2563eb', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#dc2626', '#4f46e5'];
@@ -23,7 +27,11 @@ type Sheet =
   | { kind: 'collect'; playerId: string }
   | { kind: 'props'; playerId: string }
   | { kind: 'market'; playerId: string }
-  | { kind: 'trade'; playerId: string };
+  | { kind: 'trade'; playerId: string }
+  | { kind: 'settings' }
+  | { kind: 'chart' };
+
+const PLAYER_COLOR = (i: number) => PLAYER_COLORS[i % PLAYER_COLORS.length];
 
 export default function App() {
   const { state, act, undo, redo, reset, canUndo, canRedo } = useGame();
@@ -32,7 +40,6 @@ export default function App() {
 
   const sym = state.currencySymbol;
   const money = (n: number) => `${sym}${n.toLocaleString('es')}`;
-  const player = (id: string) => state.players.find((p) => p.id === id);
 
   // Sincronización en vivo (tabla Room + Realtime).
   useRealtimeSync(state.code, state, (s) => act({ type: 'REPLACE', state: s }));
@@ -59,6 +66,25 @@ export default function App() {
     }
   };
 
+  const history = useWealthHistory(state);
+
+  // Feedback: sonido + voz cuando aparece una nueva entrada en el historial.
+  const lastLogId = useRef<string | null>(null);
+  useEffect(() => {
+    const top = state.log[0];
+    if (!top) return;
+    if (lastLogId.current === null) {
+      lastLogId.current = top.id; // no hablar al cargar la página
+      return;
+    }
+    if (top.id === lastLogId.current) return;
+    lastLogId.current = top.id;
+    if (state.settings.sound) blip();
+    if (state.settings.voice) speak(top.text);
+  }, [state.log, state.settings.sound, state.settings.voice]);
+
+  const turnPlayer = state.players[state.turnIndex];
+
   return (
     <div className="app">
       <header className="topbar">
@@ -68,11 +94,26 @@ export default function App() {
         <div className="topbar__actions">
           <button onClick={undo} disabled={!canUndo}>↶</button>
           <button onClick={redo} disabled={!canRedo}>↷</button>
+          <button onClick={() => setSheet({ kind: 'chart' })} title="Gráfico de patrimonio">📈</button>
+          <button onClick={() => setSheet({ kind: 'settings' })} title="Ajustes">⚙️</button>
           <button onClick={share} title="Copiar enlace de invitación">Compartir</button>
           <button onClick={() => { const c = prompt('Código de sala a la que unirse:'); if (c) join(c); }}>Unirse</button>
           <button onClick={() => { if (confirm('¿Nueva partida? Se borra la actual.')) reset(); }}>Nueva</button>
         </div>
       </header>
+
+      {turnPlayer && (
+        <div className="turnbar">
+          <span className="turnbar__who">Turno: <b>{turnPlayer.icon} {turnPlayer.name}</b></span>
+          {state.dice && (
+            <span className="turnbar__dice">🎲 {state.dice.a} + {state.dice.b} = {state.dice.a + state.dice.b}{state.dice.special ? ` · ${state.dice.special}` : ''}</span>
+          )}
+          <span className="turnbar__btns">
+            {state.settings.dice && <button onClick={() => act({ type: 'ROLL_DICE' })}>Tirar dados</button>}
+            <button onClick={() => act({ type: 'NEXT_TURN' })}>Siguiente turno →</button>
+          </span>
+        </div>
+      )}
 
       <section className="players">
         {state.players.map((p) => (
@@ -94,7 +135,7 @@ export default function App() {
         <button type="submit">+ Agregar</button>
       </form>
 
-      {sheet.kind !== 'none' && player(sheet.playerId) && (
+      {sheet.kind !== 'none' && (
         <div className="overlay" onClick={() => setSheet({ kind: 'none' })}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <SheetContent
@@ -102,6 +143,7 @@ export default function App() {
               state={state}
               act={act}
               money={money}
+              history={history}
               close={() => setSheet({ kind: 'none' })}
               goMarket={(playerId) => setSheet({ kind: 'market', playerId })}
             />
@@ -138,17 +180,35 @@ function PlayerTile({ p, money, onOpen }: { p: RuntimePlayer; money: (n: number)
 }
 
 function SheetContent({
-  sheet, state, act, money, close, goMarket,
+  sheet, state, act, money, history, close, goMarket,
 }: {
   sheet: Sheet;
   state: ReturnType<typeof useGame>['state'];
   act: ReturnType<typeof useGame>['act'];
   money: (n: number) => string;
+  history: ReturnType<typeof useWealthHistory>;
   close: () => void;
   goMarket: (playerId: string) => void;
 }) {
   if (sheet.kind === 'none') return null;
-  const me = state.players.find((p) => p.id === sheet.playerId)!;
+
+  if (sheet.kind === 'settings') {
+    return <SettingsPanel settings={state.settings} setSettings={(patch) => act({ type: 'SET_SETTINGS', patch })} />;
+  }
+
+  if (sheet.kind === 'chart') {
+    const players = state.players.map((p) => ({ id: p.id, name: p.name, icon: p.icon, color: PLAYER_COLOR(p.colorIndex) }));
+    return (
+      <div className="form">
+        <h2>📈 Patrimonio en el tiempo</h2>
+        <WealthChart points={history} players={players} money={money} />
+        <button className="confirm" onClick={close}>Cerrar</button>
+      </div>
+    );
+  }
+
+  const me = state.players.find((p) => p.id === sheet.playerId);
+  if (!me) return null;
 
   if (sheet.kind === 'collect') {
     return (
@@ -183,6 +243,24 @@ function SheetContent({
     return <TradePanel me={me} others={others} act={act} money={money} close={close} />;
   }
   return null;
+}
+
+function SettingsPanel({ settings, setSettings }: { settings: GameSettings; setSettings: (patch: Partial<GameSettings>) => void }) {
+  const row = (key: keyof GameSettings, label: string, desc: string) => (
+    <label className="setrow">
+      <input type="checkbox" checked={settings[key]} onChange={(e) => setSettings({ [key]: e.target.checked } as Partial<GameSettings>)} />
+      <span><b>{label}</b><br /><span className="hint">{desc}</span></span>
+    </label>
+  );
+  return (
+    <div className="form">
+      <h2>⚙️ Ajustes</h2>
+      {row('dice', 'Dados', 'Muestra el botón para tirar dados en el turno.')}
+      {row('special', 'Dado especial', 'Añade una cara especial al tirar.')}
+      {row('sound', 'Sonido', 'Blip de caja al registrar movimientos.')}
+      {row('voice', 'Voz', 'Narra los movimientos en español.')}
+    </div>
+  );
 }
 
 function AmountForm({

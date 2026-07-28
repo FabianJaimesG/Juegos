@@ -108,3 +108,23 @@
 .tradeprops { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.4rem; }
 .tradeprop { border: 2px solid transparent; border-radius: 12px; cursor: pointer; }
 .tradeprop--on { border-color: #6fe3a6; box-shadow: 0 0 0 2px rgba(111, 227, 166, 0.3); }
+
+/* Barra de turno + dados */
+.turnbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem;
+  background: #0f2a21; border: 1px solid #1e4d3c; border-radius: 10px;
+  padding: 0.5rem 0.75rem; margin: 0.75rem 0;
+}
+.turnbar__who { font-size: 0.95rem; }
+.turnbar__dice { background: #0b2018; border: 1px solid #1e4d3c; border-radius: 8px; padding: 0.2rem 0.5rem; font-size: 0.9rem; }
+.turnbar__btns { margin-left: auto; display: flex; gap: 0.4rem; }
+.turnbar__btns button { background: #1f7a52; color: #fff; border: 0; border-radius: 8px; padding: 0.45rem 0.7rem; cursor: pointer; }
+
+/* Gráfico */
+.chartlegend { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.5rem; font-size: 0.82rem; }
+.legenditem { display: inline-flex; align-items: center; gap: 0.35rem; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* Ajustes */
+.setrow { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.6rem 0; border-bottom: 1px solid #14382b; cursor: pointer; }
+.setrow input { width: 1.3rem; height: 1.3rem; margin-top: 0.15rem; }
