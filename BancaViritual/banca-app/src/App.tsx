@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { PropertyCard } from './components/PropertyCard';
 import { WealthChart } from './components/WealthChart';
-import { BOARD, getProperty } from './domain/board';
+import { BOARD, getProperty, GROUPS } from './domain/board';
 import {
   bankBuildingsLeft,
   createGame,
@@ -10,15 +10,15 @@ import {
   type GameState,
   holdingsOf,
   type LogEntry,
-  ownsFullGroup,
+  ownsFullGroupActive,
   type PendingTrade,
+  playerActiveRailUtil,
   playerBuildings,
   playerEquity,
   playerNetWorth,
-  playerRailUtil,
   type RuntimePlayer,
 } from './game/engine';
-import { canBuildOn } from './domain/wealth';
+import { canBuildOn, canSellOn } from './domain/wealth';
 import type { Property } from './domain/Property';
 import { blip, speak } from './game/feedback';
 import { useGame } from './game/useGame';
@@ -39,28 +39,49 @@ type Sheet =
   | { kind: 'edit'; playerId: string }
   | { kind: 'settings' }
   | { kind: 'chart' }
+  | { kind: 'board' }
   | { kind: 'history' };
 
 const PLAYER_COLOR = (i: number) => PLAYER_COLORS[i % PLAYER_COLORS.length];
 
-const EMOJIS = ['🙂', '😎', '🤠', '👑', '🐶', '🐱', '🦊', '🐸', '🐵', '🦁', '🐯', '🐼', '🚗', '🚀', '⚽', '🎩', '💎', '🍕', '🎸', '🌟'];
+/** Identidad especial: dispositivo "solo ver" (TV / pantalla de la mesa). */
+const VIEWER = '__viewer__';
+
+// Personajes disponibles. Nota: no existe emoji de "pegaso"; se cubre con 🦄 (unicornio/pony).
+const EMOJIS = [
+  '🙂', '😎', '🤠', '👑', '🐶', '🐱', '🦊', '🐸', '🐵', '🦁', '🐯', '🐼',
+  '🚗', '🚀', '⚽', '🎩', '💎', '🍕', '🎸', '🌟',
+  '👟', '👞', '🦕', '🦖', '🦄', '🐴', '♟️', '♞', '🐉', '🥷', '🍥', '🪄', '🦉', '⚡', '🧙',
+];
 const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 const rand6 = () => Math.floor(Math.random() * 6) + 1;
 
-/** Renta actual de una propiedad según la situación del dueño (grupo completo / casas). */
+/**
+ * Renta actual de una propiedad según la situación del dueño. Consciente de hipoteca:
+ * las hipotecadas no cuentan para el bono de set ni para el escalón de renta.
+ */
 function currentRentText(me: RuntimePlayer, prop: Property, houses: number): number | string {
   if (prop.kind === 'utility') {
-    const { utilities } = playerRailUtil(me);
+    const { utilities } = playerActiveRailUtil(me);
     return `🎲 ×${utilities >= 2 ? 10 : 4}`;
   }
-  const full = ownsFullGroup(holdingsOf(me), prop.colorGroup);
-  const { railroads } = playerRailUtil(me);
+  const full = ownsFullGroupActive(holdingsOf(me), prop.colorGroup);
+  const { railroads } = playerActiveRailUtil(me);
   return prop.rent({ houses, ownerHasFullGroup: full, railroadsOwned: railroads, utilitiesOwned: 0, diceTotal: 0 });
+}
+
+/** Orden de tablero: ferrocarriles y servicios primero, luego calles por índice de tablero. */
+function holdingSortKey(propertyId: string): number {
+  const p = getProperty(propertyId);
+  if (!p) return 9999;
+  if (p.kind === 'railroad') return -2000 + p.def.boardIndex;
+  if (p.kind === 'utility') return -1000 + p.def.boardIndex;
+  return p.def.boardIndex;
 }
 
 export default function App() {
   const { state, act, undo, redo, reset, canUndo, canRedo } = useGame();
-  const { meId, setMe } = useIdentity(state.code);
+  const { meId, setMe, deviceId } = useIdentity(state.code);
   const [sheet, setSheet] = useState<Sheet>({ kind: 'none' });
 
   const sym = state.currencySymbol;
@@ -113,14 +134,27 @@ export default function App() {
     return <SetupScreen state={state} act={act} share={share} onJoin={join} />;
   }
 
+  // Elegir jugador: reclama la identidad en el estado compartido (evita robos entre dispositivos).
+  const pickIdentity = (id: string) => {
+    if (id !== VIEWER) act({ type: 'CLAIM_PLAYER', playerId: id, deviceId });
+    setMe(id);
+  };
+  // Salir de la sala: libera el reclamo de este dispositivo y vuelve al selector.
+  const leaveRoom = () => {
+    act({ type: 'RELEASE_PLAYER', deviceId });
+    setMe(null);
+  };
+
   // ── Elegir identidad de este dispositivo ──
-  const me = state.players.find((p) => p.id === meId) ?? null;
-  if (state.players.length > 0 && !me) {
-    return <IdentityPicker players={state.players} onPick={setMe} />;
+  const isViewer = meId === VIEWER;
+  const me = isViewer ? null : state.players.find((p) => p.id === meId) ?? null;
+  if (state.players.length > 0 && !me && !isViewer) {
+    return <IdentityPicker players={state.players} onPick={pickIdentity} deviceId={deviceId} />;
   }
 
   const amAdmin = !!me?.admin;
-  const canControl = (pid: string) => amAdmin || me?.id === pid;
+  const canControl = (pid: string) => !isViewer && (amAdmin || me?.id === pid);
+  const canEditRules = amAdmin || isViewer;
   const turnPlayer = state.players[state.turnIndex];
   const myTurn = !!turnPlayer && canControl(turnPlayer.id);
 
@@ -131,13 +165,14 @@ export default function App() {
           🏦 Banca <span className="code">{hasSupabase ? '🟢' : '⚪'} Sala {state.code}</span>
         </h1>
         <div className="topbar__actions">
-          {me && (
-            <button onClick={() => setMe(null)} title="Cambiar de jugador">
-              {me.icon} {me.name}{amAdmin ? ' 🛡️' : ''}
+          {(me || isViewer) && (
+            <button onClick={leaveRoom} title="Salir de la sala (volver a elegir jugador / modo)">
+              {isViewer ? '📺 TV' : `${me!.icon} ${me!.name}${amAdmin ? ' 🛡️' : ''}`} 🚪
             </button>
           )}
-          {amAdmin && <button onClick={undo} disabled={!canUndo}>↶</button>}
-          {amAdmin && <button onClick={redo} disabled={!canRedo}>↷</button>}
+          <button onClick={undo} disabled={!canUndo} title="Deshacer">↶</button>
+          <button onClick={redo} disabled={!canRedo} title="Rehacer">↷</button>
+          <button onClick={() => setSheet({ kind: 'board' })} title="Vista de tablero (todas las propiedades)">🗺️</button>
           <button onClick={() => setSheet({ kind: 'history' })} title="Historial de movimientos">📜</button>
           <button onClick={() => setSheet({ kind: 'chart' })} title="Gráfico de patrimonio">📈</button>
           <button onClick={() => setSheet({ kind: 'settings' })} title="Ajustes">⚙️</button>
@@ -151,15 +186,21 @@ export default function App() {
           <span className="turnbar__who">Turno: <b>{turnPlayer.icon} {turnPlayer.name}</b>{myTurn && ' (tú)'}</span>
           {state.settings.dice && <DiceView dice={state.dice} onRoll={() => act({ type: 'ROLL_DICE' })} canRoll={myTurn} />}
           <span className="turnbar__btns">
-            <button onClick={() => act({ type: 'NEXT_TURN' })} disabled={!myTurn} title={myTurn ? '' : 'Solo el jugador en turno'}>
-              Siguiente turno →
+            <button onClick={() => act({ type: 'NEXT_TURN' })} disabled={!myTurn} title={myTurn ? '' : 'Solo el jugador en turno puede pasar'}>
+              {myTurn ? 'Siguiente turno →' : '🔒 Siguiente turno'}
             </button>
           </span>
         </div>
       )}
 
       {state.pendingTrade && (
-        <PendingTradeBanner trade={state.pendingTrade} players={state.players} act={act} money={money} />
+        <PendingTradeBanner
+          trade={state.pendingTrade}
+          players={state.players}
+          act={act}
+          money={money}
+          canRespond={canControl(state.pendingTrade.bId)}
+        />
       )}
 
       <section className="players">
@@ -171,8 +212,10 @@ export default function App() {
             isCurrent={p.id === turnPlayer?.id}
             canControl={canControl(p.id)}
             canTrade={!state.pendingTrade && state.players.length >= 2}
+            isSelf={me?.id === p.id}
             onOpen={(k) => setSheet({ kind: k, playerId: p.id })}
             onSalida={() => act({ type: 'SALIDA', playerId: p.id })}
+            onBankrupt={() => { if (confirm(`¿Declararte en bancarrota, ${p.name}? Tus propiedades vuelven al banco.`)) act({ type: 'DECLARE_BANKRUPTCY', playerId: p.id }); }}
           />
         ))}
       </section>
@@ -187,6 +230,7 @@ export default function App() {
               money={money}
               history={history}
               canControl={canControl}
+              canEditRules={canEditRules}
               close={() => setSheet({ kind: 'none' })}
               goMarket={(playerId) => setSheet({ kind: 'market', playerId })}
             />
@@ -198,23 +242,25 @@ export default function App() {
 }
 
 function PlayerTile({
-  p, money, isCurrent, canControl, canTrade, onOpen, onSalida,
+  p, money, isCurrent, canControl, canTrade, isSelf, onOpen, onSalida, onBankrupt,
 }: {
   p: RuntimePlayer;
   money: (n: number) => string;
   isCurrent: boolean;
   canControl: boolean;
   canTrade: boolean;
+  isSelf: boolean;
   onOpen: (k: Sheet['kind']) => void;
   onSalida: () => void;
+  onBankrupt: () => void;
 }) {
   const nw = playerNetWorth(p);
   const b = playerBuildings(p);
   const color = PLAYER_COLOR(p.colorIndex);
   return (
-    <article className={`ptile ${isCurrent ? 'ptile--current' : ''} ${canControl ? '' : 'ptile--other'}`} style={{ borderTopColor: color }}>
+    <article className={`ptile ${isCurrent ? 'ptile--current' : ''} ${canControl ? '' : 'ptile--other'} ${p.bankrupt ? 'ptile--bankrupt' : ''}`} style={{ borderTopColor: color }}>
       <div className="ptile__head">
-        <span className="ptile__name">{p.icon} {p.name} {isCurrent && '⭐'} {p.admin && '🛡️'}</span>
+        <span className="ptile__name">{p.icon} {p.name} {isCurrent && '⭐'} {p.admin && '🛡️'} {p.bankrupt && '💀'}</span>
         {canControl && <button className="ptile__edit" title="Editar personaje" onClick={() => onOpen('edit')}>✏️</button>}
       </div>
       <div className="ptile__cash">{money(p.cash)}</div>
@@ -236,12 +282,16 @@ function PlayerTile({
           <button className="b-prop" onClick={() => onOpen('props')}>Ver propiedades</button>
         )}
       </div>
+      {/* La bancarrota solo la declara el propio jugador desde su dispositivo. */}
+      {isSelf && !p.bankrupt && (
+        <button className="b-bankrupt" onClick={onBankrupt}>💀 Declararme en bancarrota</button>
+      )}
     </article>
   );
 }
 
 function SheetContent({
-  sheet, state, act, money, history, canControl, close, goMarket,
+  sheet, state, act, money, history, canControl, canEditRules, close, goMarket,
 }: {
   sheet: Sheet;
   state: ReturnType<typeof useGame>['state'];
@@ -249,13 +299,18 @@ function SheetContent({
   money: (n: number) => string;
   history: ReturnType<typeof useWealthHistory>;
   canControl: (pid: string) => boolean;
+  canEditRules: boolean;
   close: () => void;
   goMarket: (playerId: string) => void;
 }) {
   if (sheet.kind === 'none') return null;
 
   if (sheet.kind === 'settings') {
-    return <SettingsPanel settings={state.settings} setSettings={(patch) => act({ type: 'SET_SETTINGS', patch })} />;
+    return <SettingsPanel settings={state.settings} canEditRules={canEditRules} setSettings={(patch) => act({ type: 'SET_SETTINGS', patch })} />;
+  }
+
+  if (sheet.kind === 'board') {
+    return <BoardOverview state={state} close={close} />;
   }
 
   if (sheet.kind === 'history') {
@@ -292,7 +347,7 @@ function SheetContent({
   }
 
   if (sheet.kind === 'props') {
-    return <PropsPanel me={me} act={act} money={money} readOnly={!mine} goMarket={() => goMarket(me.id)} />;
+    return <PropsPanel me={me} act={act} money={money} readOnly={!mine} evenBuild={state.settings.evenBuild} goMarket={() => goMarket(me.id)} />;
   }
 
   if (sheet.kind === 'market') {
@@ -306,12 +361,12 @@ function SheetContent({
   return null;
 }
 
-type BoolSetting = 'dice' | 'special' | 'sound' | 'voice';
+type BoolSetting = 'dice' | 'special' | 'sound' | 'voice' | 'evenBuild';
 
-function SettingsPanel({ settings, setSettings }: { settings: GameSettings; setSettings: (patch: Partial<GameSettings>) => void }) {
-  const row = (key: BoolSetting, label: string, desc: string) => (
-    <label className="setrow">
-      <input type="checkbox" checked={settings[key]} onChange={(e) => setSettings({ [key]: e.target.checked })} />
+function SettingsPanel({ settings, canEditRules, setSettings }: { settings: GameSettings; canEditRules: boolean; setSettings: (patch: Partial<GameSettings>) => void }) {
+  const row = (key: BoolSetting, label: string, desc: string, disabled = false) => (
+    <label className={`setrow ${disabled ? 'setrow--locked' : ''}`}>
+      <input type="checkbox" checked={settings[key]} disabled={disabled} onChange={(e) => setSettings({ [key]: e.target.checked })} />
       <span><b>{label}</b><br /><span className="hint">{desc}</span></span>
     </label>
   );
@@ -322,6 +377,9 @@ function SettingsPanel({ settings, setSettings }: { settings: GameSettings; setS
       {row('special', 'Dado especial', 'Añade una cara especial al tirar.')}
       {row('sound', 'Sonido', 'Blip de caja al registrar movimientos.')}
       {row('voice', 'Voz', 'Narra los movimientos en español.')}
+      {row('evenBuild', 'Construcción/venta pareja', canEditRules
+        ? 'Casas uniformes por grupo: no se puede tener un hotel y otra propiedad sin casas.'
+        : 'Casas uniformes por grupo. Solo un admin 🛡️ o la pantalla 📺 puede cambiar esta regla.', !canEditRules)}
     </div>
   );
 }
@@ -341,6 +399,8 @@ function CollectForm({
   const [sel, setSel] = useState<string[]>([]);
   const n = parseInt(amt, 10) || 0;
   const fromBank = sel.length === 0;
+  // Ningún pagador seleccionado puede quedar en 0.
+  const payerShort = others.some((o) => sel.includes(o.id) && o.cash - n < 1);
 
   return (
     <div className="form">
@@ -365,9 +425,10 @@ function CollectForm({
         ))}
       </div>
       {sel.length > 1 && <p className="hint">Total a recibir: {money(n * sel.length)}</p>}
+      {payerShort && <p className="hint">Un jugador no puede pagar sin quedar en 0. Debería declararse en bancarrota.</p>}
       <button
         className="confirm"
-        disabled={n <= 0}
+        disabled={n <= 0 || payerShort}
         onClick={() => {
           if (fromBank) act({ type: 'BANK_TO_PLAYER', playerId: me.id, amount: n });
           else act({ type: 'COLLECT', toId: me.id, fromIds: sel, amount: n });
@@ -390,16 +451,18 @@ function PayForm({
   money: (n: number) => string;
 }) {
   const [amt, setAmt] = useState('');
-  const [sel, setSel] = useState<string[]>(others.length === 1 ? [others[0].id] : []);
+  // Por defecto: banco (nadie seleccionado), aunque quede un solo jugador.
+  const [sel, setSel] = useState<string[]>([]);
   const n = parseInt(amt, 10) || 0;
   const total = n * (sel.length || 1);
   const toBank = sel.length === 0;
-  const enough = me.cash >= total;
+  // No puede quedar en 0: debe conservar al menos 1.
+  const enough = me.cash - total >= 1;
 
   return (
     <div className="form">
       <h2>Pagar — {me.name}</h2>
-      <p className="hint">Sin seleccionar nadie → paga al <b>banco</b>. Con jugadores → transfiere {money(n)} a cada uno.</p>
+      <p className="hint">Sin seleccionar nadie → paga al <b>banco</b>. Con jugadores → transfiere {money(n)} a cada uno. Debes conservar al menos {money(1)}.</p>
       <input autoFocus inputMode="numeric" value={amt} onChange={(e) => setAmt(e.target.value.replace(/\D/g, ''))} placeholder="Monto" />
       <div className="quick">
         {QUICKS.map((q) => (
@@ -436,12 +499,13 @@ function PayForm({
 }
 
 function PropsPanel({
-  me, act, money, readOnly, goMarket,
+  me, act, money, readOnly, evenBuild, goMarket,
 }: {
   me: RuntimePlayer;
   act: ReturnType<typeof useGame>['act'];
   money: (n: number) => string;
   readOnly?: boolean;
+  evenBuild: boolean;
   goMarket: () => void;
 }) {
   return (
@@ -455,9 +519,10 @@ function PropsPanel({
       {!readOnly && <button className="confirm" onClick={goMarket}>🛒 Comprar propiedad</button>}
       <div className="ownedgrid">
         {me.holdings.length === 0 && <p className="hint">Aún no tiene propiedades.</p>}
-        {me.holdings.map((h) => {
+        {[...me.holdings].sort((a, b) => holdingSortKey(a.propertyId) - holdingSortKey(b.propertyId)).map((h) => {
           const prop = getProperty(h.propertyId)!;
-          const buildable = canBuildOn({ cash: me.cash, holdings: me.holdings }, h.propertyId);
+          const buildable = canBuildOn({ cash: me.cash, holdings: me.holdings }, h.propertyId, evenBuild);
+          const sellable = canSellOn({ cash: me.cash, holdings: me.holdings }, h.propertyId, evenBuild);
           return (
             <div key={h.propertyId} className="owned">
               <PropertyCard
@@ -482,7 +547,7 @@ function PropsPanel({
                     <button disabled={!buildable || me.cash < prop.houseCost} onClick={() => act({ type: 'BUILD_HOUSE', playerId: me.id, propertyId: h.propertyId })}>
                       +🏠 {money(prop.houseCost)}
                     </button>
-                    <button disabled={h.houses <= 0} onClick={() => act({ type: 'SELL_HOUSE', playerId: me.id, propertyId: h.propertyId })}>
+                    <button disabled={!sellable} onClick={() => act({ type: 'SELL_HOUSE', playerId: me.id, propertyId: h.propertyId })}>
                       -🏠
                     </button>
                   </>
@@ -681,11 +746,12 @@ function DiceView({ dice, onRoll, canRoll }: {
   );
 }
 
-function PendingTradeBanner({ trade, players, act, money }: {
+function PendingTradeBanner({ trade, players, act, money, canRespond }: {
   trade: PendingTrade;
   players: RuntimePlayer[];
   act: ReturnType<typeof useGame>['act'];
   money: (n: number) => string;
+  canRespond: boolean;
 }) {
   const A = players.find((p) => p.id === trade.aId);
   const B = players.find((p) => p.id === trade.bId);
@@ -701,11 +767,14 @@ function PendingTradeBanner({ trade, players, act, money }: {
         <b>{A?.icon} {A?.name}</b> ofrece: {side(trade.aCash, trade.aProps)}<br />
         <b>{B?.icon} {B?.name}</b> ofrece: {side(trade.bCash, trade.bProps)}
       </div>
-      <p className="hint">Debe responder <b>{B?.name}</b>. (Los demás solo ven la negociación en proceso.)</p>
-      <div className="tradebanner__btns">
-        <button className="t-accept" onClick={() => act({ type: 'ACCEPT_TRADE' })}>✅ {B?.name} acepta</button>
-        <button className="t-reject" onClick={() => act({ type: 'REJECT_TRADE' })}>❌ Rechazar</button>
-      </div>
+      {canRespond ? (
+        <div className="tradebanner__btns">
+          <button className="t-accept" onClick={() => act({ type: 'ACCEPT_TRADE' })}>✅ Aceptar</button>
+          <button className="t-reject" onClick={() => act({ type: 'REJECT_TRADE' })}>❌ Rechazar</button>
+        </div>
+      ) : (
+        <p className="hint">Esperando la respuesta de <b>{B?.name}</b>…</p>
+      )}
     </div>
   );
 }
@@ -757,19 +826,87 @@ function HistoryPanel({ log }: { log: LogEntry[] }) {
   );
 }
 
-function IdentityPicker({ players, onPick }: { players: RuntimePlayer[]; onPick: (id: string) => void }) {
+function BoardOverview({ state, close }: {
+  state: GameState;
+  close: () => void;
+}) {
+  // Dueño (y estado de hipoteca) por propiedad.
+  const ownerOf = new Map<string, { player: RuntimePlayer; mortgaged: boolean; houses: number }>();
+  for (const p of state.players) {
+    for (const h of p.holdings) ownerOf.set(h.propertyId, { player: p, mortgaged: h.mortgaged, houses: h.houses });
+  }
+  const board = [...BOARD].sort((a, b) => a.def.boardIndex - b.def.boardIndex);
+  const sinVender = board.filter((p) => !ownerOf.has(p.id)).length;
+  const hipotecadas = board.filter((p) => ownerOf.get(p.id)?.mortgaged).length;
+  const left = bankBuildingsLeft(state);
+
+  return (
+    <div className="form">
+      <h2>🗺️ Tablero — todas las propiedades</h2>
+      <div className="boardsummary">
+        <span>🏷️ Sin vender: <b>{sinVender}</b></span>
+        <span>🏦 Hipotecadas: <b>{hipotecadas}</b></span>
+        <span>🏠 Casas disp.: <b>{left.houses}</b></span>
+        <span>🏨 Hoteles disp.: <b>{left.hotels}</b></span>
+      </div>
+      <ul className="boardlist">
+        {board.map((prop) => {
+          const own = ownerOf.get(prop.id);
+          const g = GROUPS[prop.colorGroup].color;
+          return (
+            <li key={prop.id} className={`boardrow ${own?.mortgaged ? 'boardrow--mortgaged' : ''}`}>
+              <span className="boardrow__band" style={{ background: g }} />
+              <span className="boardrow__name">{prop.def.emoji} {prop.name}</span>
+              <span className="boardrow__owner">
+                {own ? (
+                  <span style={{ color: PLAYER_COLOR(own.player.colorIndex) }}>
+                    {own.player.icon} {own.player.name}
+                    {own.houses > 0 && ` · ${own.houses >= 5 ? '🏨' : '🏠'.repeat(own.houses)}`}
+                    {own.mortgaged && ' · 🏦 hipotecada'}
+                  </span>
+                ) : (
+                  <span className="hint">sin dueño</span>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <button className="confirm" onClick={close}>Cerrar</button>
+    </div>
+  );
+}
+
+function IdentityPicker({ players, onPick, deviceId }: { players: RuntimePlayer[]; onPick: (id: string) => void; deviceId: string }) {
   return (
     <div className="setup">
-      <h1>¿Quién juega en este dispositivo?</h1>
+      <h1>¿Quién usa este dispositivo?</h1>
       <p className="hint">Elige tu jugador: solo podrás mover tu propio dinero. Los administradores 🛡️ pueden operar a todos.</p>
       <div className="idgrid">
-        {players.map((p) => (
-          <button key={p.id} className="idbtn" style={{ borderColor: PLAYER_COLOR(p.colorIndex) }} onClick={() => onPick(p.id)}>
-            <span className="idbtn__icon">{p.icon}</span>
-            <span>{p.name} {p.admin && '🛡️'}</span>
-          </button>
-        ))}
+        {players.map((p) => {
+          // Un jugador tomado por OTRO dispositivo no puede robarse (sí re-confirmar el propio).
+          const taken = !!p.claimedBy && p.claimedBy !== deviceId;
+          return (
+            <button
+              key={p.id}
+              className={`idbtn ${taken ? 'idbtn--taken' : ''}`}
+              style={{ borderColor: PLAYER_COLOR(p.colorIndex) }}
+              disabled={taken}
+              title={taken ? 'En uso en otro dispositivo' : ''}
+              onClick={() => onPick(p.id)}
+            >
+              <span className="idbtn__icon">{p.icon}</span>
+              <span>{p.name} {p.admin && '🛡️'} {taken && '🔒'}</span>
+            </button>
+          );
+        })}
       </div>
+      <h2>O como pantalla</h2>
+      <p className="hint">Ideal para un móvil/TV en la mesa que muestre la partida a todos, sin jugar.</p>
+      <button className="idbtn idbtn--tv" onClick={() => onPick(VIEWER)}>
+        <span className="idbtn__icon">📺</span>
+        <span>Solo ver (modo TV)</span>
+      </button>
     </div>
   );
 }

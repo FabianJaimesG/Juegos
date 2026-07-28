@@ -3,13 +3,16 @@ import { getProperty } from '../domain/board';
 import { GAME_CONFIG } from '../domain/config';
 import type { Holding, PlayerHoldings } from '../domain/wealth';
 import {
+  activeCountByKind,
   availableBuildings,
   buildingCounts,
   canBuildOn,
+  canSellOn,
   countByKind,
   equity,
   netWorth,
   ownsFullGroup,
+  ownsFullGroupActive,
 } from '../domain/wealth';
 
 export interface RuntimePlayer {
@@ -22,6 +25,8 @@ export interface RuntimePlayer {
   holdings: Holding[];
   /** Administrador: su dispositivo puede operar a todos los jugadores. */
   admin: boolean;
+  /** Id del dispositivo que "reclamó" a este jugador (para no robar identidades). */
+  claimedBy?: string;
 }
 
 export interface LogEntry {
@@ -37,6 +42,8 @@ export interface GameSettings {
   voice: boolean;
   /** Dinero inicial por jugador (configurable en la preparación). */
   initialBalance: number;
+  /** Construcción/venta pareja de casas (regla clásica de uniformidad). */
+  evenBuild: boolean;
 }
 
 export interface DiceRoll {
@@ -76,6 +83,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   sound: true,
   voice: true,
   initialBalance: GAME_CONFIG.initialBalance,
+  evenBuild: true,
 };
 
 /** Rellena campos nuevos en estados antiguos (localStorage / remoto). */
@@ -96,6 +104,9 @@ export type Action =
   | { type: 'START_GAME' }
   | { type: 'REORDER_PLAYER'; playerId: string; dir: -1 | 1 }
   | { type: 'REMOVE_PLAYER'; playerId: string }
+  | { type: 'DECLARE_BANKRUPTCY'; playerId: string }
+  | { type: 'CLAIM_PLAYER'; playerId: string; deviceId: string }
+  | { type: 'RELEASE_PLAYER'; deviceId: string }
   | { type: 'BANK_TO_PLAYER'; playerId: string; amount: number } // cobrar del banco
   | { type: 'PLAYER_TO_BANK'; playerId: string; amount: number } // pagar al banco
   | { type: 'TRANSFER'; fromId: string; toIds: string[]; amount: number } // a cada uno
@@ -148,7 +159,11 @@ export const playerNetWorth = (p: RuntimePlayer) => netWorth(holdingsOf(p));
 export const playerEquity = (p: RuntimePlayer) => equity(holdingsOf(p));
 export const playerBuildings = (p: RuntimePlayer) => buildingCounts(holdingsOf(p));
 export const playerRailUtil = (p: RuntimePlayer) => countByKind(holdingsOf(p));
+export const playerActiveRailUtil = (p: RuntimePlayer) => activeCountByKind(holdingsOf(p));
 export const bankBuildingsLeft = (s: GameState) => availableBuildings(s.players.map(holdingsOf));
+
+/** Efectivo mínimo que un jugador debe conservar tras un pago (no puede quedar en 0). */
+export const MIN_CASH = 1;
 
 function log(s: GameState, text: string): LogEntry[] {
   return [{ id: uid(), text, ts: Date.now() }, ...s.log].slice(0, 200);
@@ -256,7 +271,7 @@ export function reducer(s: GameState, a: Action): GameState {
 
     case 'PLAYER_TO_BANK': {
       const p = s.players.find((x) => x.id === a.playerId);
-      if (!p || a.amount <= 0 || p.cash < a.amount) return s;
+      if (!p || a.amount <= 0 || p.cash - a.amount < MIN_CASH) return s;
       return {
         ...s,
         players: mapPlayer(s, a.playerId, (x) => ({ ...x, cash: x.cash - a.amount })),
@@ -268,7 +283,7 @@ export function reducer(s: GameState, a: Action): GameState {
       const from = s.players.find((x) => x.id === a.fromId);
       const recips = s.players.filter((x) => a.toIds.includes(x.id));
       const total = a.amount * recips.length;
-      if (!from || a.amount <= 0 || recips.length === 0 || from.cash < total) return s;
+      if (!from || a.amount <= 0 || recips.length === 0 || from.cash - total < MIN_CASH) return s;
       const recipIds = new Set(a.toIds);
       const players = s.players.map((x) => {
         if (x.id === a.fromId) return { ...x, cash: x.cash - total };
@@ -283,6 +298,8 @@ export function reducer(s: GameState, a: Action): GameState {
       const to = s.players.find((x) => x.id === a.toId);
       const payers = s.players.filter((x) => a.fromIds.includes(x.id));
       if (!to || a.amount <= 0 || payers.length === 0) return s;
+      // Ningún pagador puede quedar por debajo del mínimo.
+      if (payers.some((pp) => pp.cash - a.amount < MIN_CASH)) return s;
       const payerIds = new Set(a.fromIds);
       const players = s.players.map((x) => {
         if (x.id === a.toId) return { ...x, cash: x.cash + a.amount * payers.length };
@@ -311,7 +328,7 @@ export function reducer(s: GameState, a: Action): GameState {
       const taken = s.players.some((x) => x.holdings.some((h) => h.propertyId === a.propertyId));
       if (taken) return s;
       const price = a.price ?? prop.price;
-      if (p.cash < price) return s;
+      if (p.cash - price < MIN_CASH) return s;
       return {
         ...s,
         players: mapPlayer(s, a.playerId, (x) => ({
@@ -345,7 +362,7 @@ export function reducer(s: GameState, a: Action): GameState {
       const prop = getProperty(a.propertyId);
       const p = s.players.find((x) => x.id === a.playerId);
       const h = p?.holdings.find((x) => x.propertyId === a.propertyId);
-      if (!prop || !p || !h || !h.mortgaged || p.cash < prop.unmortgageCost) return s;
+      if (!prop || !p || !h || !h.mortgaged || p.cash - prop.unmortgageCost < MIN_CASH) return s;
       return {
         ...s,
         players: mapPlayer(s, a.playerId, (x) => ({
@@ -363,8 +380,8 @@ export function reducer(s: GameState, a: Action): GameState {
       const prop = getProperty(a.propertyId);
       const p = s.players.find((x) => x.id === a.playerId);
       if (!prop || !p) return s;
-      if (!canBuildOn(holdingsOf(p), a.propertyId)) return s;
-      if (p.cash < prop.houseCost) return s;
+      if (!canBuildOn(holdingsOf(p), a.propertyId, s.settings.evenBuild)) return s;
+      if (p.cash - prop.houseCost < MIN_CASH) return s;
       const h = p.holdings.find((x) => x.propertyId === a.propertyId)!;
       const left = bankBuildingsLeft(s);
       const willBeHotel = h.houses + 1 >= 5;
@@ -387,6 +404,7 @@ export function reducer(s: GameState, a: Action): GameState {
       const p = s.players.find((x) => x.id === a.playerId);
       const h = p?.holdings.find((x) => x.propertyId === a.propertyId);
       if (!prop || !p || !h || h.houses <= 0) return s;
+      if (!canSellOn(holdingsOf(p), a.propertyId, s.settings.evenBuild)) return s;
       const refund = Math.round(prop.houseCost * GAME_CONFIG.houseSellRefundRate);
       return {
         ...s,
@@ -401,16 +419,51 @@ export function reducer(s: GameState, a: Action): GameState {
       };
     }
 
-    case 'EDIT_PLAYER':
+    case 'EDIT_PLAYER': {
+      const before = s.players.find((x) => x.id === a.playerId);
+      const players = mapPlayer(s, a.playerId, (x) => ({
+        ...x,
+        name: a.name?.trim() || x.name,
+        icon: a.icon ?? x.icon,
+        colorIndex: a.colorIndex ?? x.colorIndex,
+        admin: a.admin ?? x.admin,
+      }));
+      // Registrar en historial solo cambios visibles (nombre/icono/color), no el toggle de admin.
+      let text = '';
+      const newName = a.name?.trim();
+      if (before && newName && newName !== before.name) text = `${before.name} cambió su nombre a ${newName}`;
+      else if (before && ((a.icon && a.icon !== before.icon) || (a.colorIndex != null && a.colorIndex !== before.colorIndex))) {
+        text = `Se editó el personaje de ${newName || before.name}`;
+      }
+      return { ...s, players, log: text ? log(s, text) : s.log };
+    }
+
+    case 'DECLARE_BANKRUPTCY': {
+      const p = s.players.find((x) => x.id === a.playerId);
+      if (!p || p.bankrupt) return s;
       return {
         ...s,
-        players: mapPlayer(s, a.playerId, (x) => ({
-          ...x,
-          name: a.name?.trim() || x.name,
-          icon: a.icon ?? x.icon,
-          colorIndex: a.colorIndex ?? x.colorIndex,
-          admin: a.admin ?? x.admin,
-        })),
+        players: mapPlayer(s, a.playerId, (x) => ({ ...x, bankrupt: true, cash: 0, holdings: [] })),
+        log: log(s, `${p.name} se declaró en bancarrota (sus propiedades vuelven al banco)`),
+      };
+    }
+
+    case 'CLAIM_PLAYER': {
+      // Marca al jugador como reclamado por este dispositivo y libera cualquier otro que tuviera.
+      return {
+        ...s,
+        players: s.players.map((x) => {
+          if (x.id === a.playerId) return { ...x, claimedBy: a.deviceId };
+          if (x.claimedBy === a.deviceId) return { ...x, claimedBy: undefined };
+          return x;
+        }),
+      };
+    }
+
+    case 'RELEASE_PLAYER':
+      return {
+        ...s,
+        players: s.players.map((x) => (x.claimedBy === a.deviceId ? { ...x, claimedBy: undefined } : x)),
       };
 
     case 'PROPOSE_TRADE': {
@@ -476,4 +529,4 @@ export function reducer(s: GameState, a: Action): GameState {
 }
 
 // Reexport de utilidades usadas por la UI.
-export { ownsFullGroup };
+export { ownsFullGroup, ownsFullGroupActive };

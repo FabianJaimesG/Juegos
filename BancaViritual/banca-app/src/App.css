@@ -199,3 +199,26 @@
 /* Ajustes */
 .setrow { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.6rem 0; border-bottom: 1px solid var(--line); cursor: pointer; }
 .setrow input { width: 1.3rem; height: 1.3rem; margin-top: 0.15rem; }
+.setrow--locked { opacity: 0.6; cursor: not-allowed; }
+.setrow--locked input { cursor: not-allowed; }
+
+/* Turno bloqueado: se ve claramente que no se puede pulsar */
+.turnbar__btns button:disabled { background: #cbd5e1; color: #64748b; cursor: not-allowed; opacity: 0.85; }
+.turnbar__dice button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Bancarrota */
+.b-bankrupt { width: 100%; margin-top: 0.5rem; background: #7f1d1d; color: #fff; border: 0; border-radius: 8px; padding: 0.5rem; cursor: pointer; font-size: 0.85rem; }
+.ptile--bankrupt { opacity: 0.55; filter: grayscale(0.4); }
+
+/* Modo TV / identidad tomada */
+.idbtn--tv { flex-direction: row; justify-content: center; border-style: dashed; border-color: #6d28d9; }
+.idbtn--taken { opacity: 0.5; cursor: not-allowed; }
+
+/* Vista de tablero (espectador) */
+.boardsummary { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem 0.8rem; margin-bottom: 0.6rem; font-size: 0.9rem; }
+.boardlist { list-style: none; padding: 0; margin: 0; max-height: 62vh; overflow-y: auto; }
+.boardrow { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
+.boardrow__band { width: 8px; height: 1.4rem; border-radius: 3px; flex: 0 0 auto; }
+.boardrow__name { flex: 1 1 auto; min-width: 0; }
+.boardrow__owner { flex: 0 0 auto; text-align: right; font-weight: 600; }
+.boardrow--mortgaged { opacity: 0.65; }

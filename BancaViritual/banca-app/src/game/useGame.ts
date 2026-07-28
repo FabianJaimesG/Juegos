@@ -35,8 +35,9 @@ export function useGame() {
 
   const act = useCallback(
     (action: Action) => {
-      // Guarda snapshot para undo (salvo REPLACE, que viene de sync).
-      if (action.type !== 'REPLACE') {
+      // Guarda snapshot para undo (salvo REPLACE de sync y ops de identidad).
+      const skipHistory = action.type === 'REPLACE' || action.type === 'CLAIM_PLAYER' || action.type === 'RELEASE_PLAYER';
+      if (!skipHistory) {
         past.current = [state, ...past.current].slice(0, 50);
         future.current = [];
       }
