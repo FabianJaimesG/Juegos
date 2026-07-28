@@ -1,71 +1,99 @@
-.banca-shell {
-  max-width: 640px;
+* { box-sizing: border-box; }
+
+.app {
+  max-width: 900px;
   margin: 0 auto;
-  padding: 2rem 1.25rem 4rem;
-  font-family: system-ui, sans-serif;
+  padding: 0 0.75rem 3rem;
   color: #e8f2ec;
+  font-family: system-ui, sans-serif;
 }
 
-.banca-shell h1 {
-  font-size: 2rem;
-  margin: 0 0 0.25rem;
+.topbar {
+  position: sticky;
+  top: 0;
+  background: #0a1f18;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.2rem;
+  border-bottom: 1px solid #1e4d3c;
+  z-index: 5;
 }
-
-.tag {
-  color: #8fb8a4;
-  margin: 0 0 1.5rem;
+.topbar h1 { font-size: 1.25rem; margin: 0; display: flex; align-items: baseline; gap: 0.5rem; }
+.code { font-size: 0.75rem; color: #8fb8a4; font-weight: 400; }
+.topbar__actions { display: flex; gap: 0.35rem; }
+.topbar__actions button {
+  background: #12352a; color: #e8f2ec; border: 1px solid #1e4d3c;
+  border-radius: 8px; padding: 0.35rem 0.6rem; cursor: pointer; font-size: 0.9rem;
 }
+.topbar__actions button:disabled { opacity: 0.4; cursor: default; }
 
-.card {
-  background: #12352a;
+.players {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+.empty { color: #8fb8a4; }
+
+.ptile {
+  background: #0f2a21;
   border: 1px solid #1e4d3c;
-  border-radius: 14px;
-  padding: 1rem 1.25rem;
-  margin-bottom: 1.5rem;
+  border-top: 4px solid #888;
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+.ptile__name { font-weight: 700; }
+.ptile__cash { font-size: 1.5rem; font-weight: 700; color: #6fe3a6; margin: 0.3rem 0; }
+.ptile__stats { display: flex; flex-wrap: wrap; gap: 0.5rem; font-size: 0.8rem; color: #a9c9ba; margin-bottom: 0.6rem; }
+.ptile__btns { display: flex; gap: 0.35rem; }
+.ptile__btns button { flex: 1; border: 0; border-radius: 8px; padding: 0.45rem 0; cursor: pointer; font-size: 0.85rem; color: #fff; }
+.b-in { background: #15803d; }
+.b-out { background: #b45309; }
+.b-prop { background: #1e4d7b; }
+
+.addplayer { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.addplayer input {
+  flex: 1; background: #0f2a21; border: 1px solid #1e4d3c; border-radius: 8px;
+  padding: 0.6rem; color: #e8f2ec; font-size: 1rem;
+}
+.addplayer button { background: #1f7a52; color: #fff; border: 0; border-radius: 8px; padding: 0 1rem; cursor: pointer; }
+
+.overlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: flex-end; justify-content: center; z-index: 10;
+}
+.sheet {
+  background: #0a1f18; border: 1px solid #1e4d3c; border-radius: 16px 16px 0 0;
+  width: 100%; max-width: 900px; max-height: 88vh; overflow-y: auto; padding: 1rem;
+}
+@media (min-width: 640px) {
+  .overlay { align-items: center; }
+  .sheet { border-radius: 16px; }
 }
 
-.card h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.1rem;
+.form h2 { margin: 0.2rem 0 0.8rem; font-size: 1.15rem; }
+.form input {
+  width: 100%; background: #0f2a21; border: 1px solid #1e4d3c; border-radius: 10px;
+  padding: 0.8rem; color: #e8f2ec; font-size: 1.4rem; text-align: center;
 }
+.hint { color: #8fb8a4; font-size: 0.85rem; }
+.quick { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
+.quick button { background: #12352a; color: #e8f2ec; border: 1px solid #1e4d3c; border-radius: 8px; padding: 0.5rem 0.8rem; cursor: pointer; }
 
-.card ul {
-  margin: 0 0 0.75rem;
-  padding-left: 1.1rem;
-}
+.chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
+.chip { background: #12352a; color: #e8f2ec; border: 1px solid #1e4d3c; border-radius: 999px; padding: 0.4rem 0.8rem; cursor: pointer; }
+.chip--on { background: #1f7a52; border-color: #2c9d6c; }
 
-.card code {
-  background: #0d271e;
-  padding: 0.1rem 0.4rem;
-  border-radius: 6px;
-  font-size: 0.85em;
-  word-break: break-all;
-}
+.confirm { width: 100%; background: #1f7a52; color: #fff; border: 0; border-radius: 10px; padding: 0.8rem; font-size: 1.05rem; cursor: pointer; margin-top: 0.6rem; }
+.confirm:disabled { opacity: 0.5; cursor: default; }
+.salida { width: 100%; background: #15803d; color: #fff; border: 0; border-radius: 10px; padding: 0.7rem; cursor: pointer; margin-top: 0.4rem; }
 
-.ok {
-  color: #6fe3a6;
-}
+.wealth { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem; color: #cfe6da; }
 
-.warn {
-  color: #e3c76f;
-}
-
-.note {
-  color: #8fb8a4;
-  font-size: 0.9rem;
-  margin: 0;
-}
-
-.banca-shell button {
-  background: #1f7a52;
-  color: #fff;
-  border: 0;
-  border-radius: 10px;
-  padding: 0.7rem 1.1rem;
-  font-size: 1rem;
-  cursor: pointer;
-}
-
-.banca-shell button:hover {
-  background: #248a5d;
-}
+.ownedgrid, .market { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.75rem; }
+.owned, .market__item { display: flex; flex-direction: column; gap: 0.35rem; align-items: center; }
+.owned__btns { display: flex; flex-wrap: wrap; gap: 0.3rem; justify-content: center; max-width: 150px; }
+.owned__btns button, .buy { background: #12352a; color: #e8f2ec; border: 1px solid #1e4d3c; border-radius: 8px; padding: 0.4rem 0.5rem; cursor: pointer; font-size: 0.78rem; }
+.owned__btns button:disabled, .buy:disabled { opacity: 0.4; cursor: default; }
+.buy { width: 130px; background: #1f7a52; color: #fff; border: 0; }
