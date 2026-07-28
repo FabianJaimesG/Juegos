@@ -6,9 +6,11 @@ interface Props {
   property: Property;
   houses?: number; // 0..4; 5 = hotel
   mortgaged?: boolean;
-  /** Nombre del dueño (opcional, para mostrar la banda de propietario). */
+  /** Nombre del dueño (opcional). */
   owner?: string;
   compact?: boolean;
+  /** Renta actual ya calculada según la situación (grupo completo / casas). */
+  currentRent?: number | string;
   onClick?: () => void;
 }
 
@@ -18,8 +20,8 @@ const RENT_LABELS: Record<Property['kind'], string[]> = {
   utility: ['×4 🎲', '×10 🎲🎲'],
 };
 
-/** Tarjeta visual de una propiedad. Reutilizable en tablero, info de jugador y negociación. */
-export function PropertyCard({ property, houses = 0, mortgaged = false, owner, compact, onClick }: Props) {
+/** Tarjeta visual de una propiedad. El nombre va en la banda de color. */
+export function PropertyCard({ property, houses = 0, mortgaged = false, owner, compact, currentRent, onClick }: Props) {
   const g = GROUPS[property.colorGroup];
   const labels = RENT_LABELS[property.kind];
 
@@ -32,10 +34,14 @@ export function PropertyCard({ property, houses = 0, mortgaged = false, owner, c
     >
       <header className="pcard__band">
         <span className="pcard__emoji">{property.def.emoji}</span>
-        <span className="pcard__group">{g.label}</span>
+        <span className="pcard__name">{property.name}</span>
       </header>
 
-      <h3 className="pcard__name">{property.name}</h3>
+      {currentRent != null && (
+        <div className="pcard__current">
+          Renta actual: <b>{currentRent}</b>
+        </div>
+      )}
 
       {!compact && (
         <table className="pcard__rents">
@@ -56,11 +62,7 @@ export function PropertyCard({ property, houses = 0, mortgaged = false, owner, c
         <span>🏦 {property.mortgageValue}</span>
       </footer>
 
-      {houses > 0 && (
-        <div className="pcard__houses">
-          {houses >= 5 ? '🏨 Hotel' : '🏠'.repeat(houses)}
-        </div>
-      )}
+      {houses > 0 && <div className="pcard__houses">{houses >= 5 ? '🏨 Hotel' : '🏠'.repeat(houses)}</div>}
       {mortgaged && <div className="pcard__badge">HIPOTECADA</div>}
       {owner && <div className="pcard__owner">{owner}</div>}
     </article>

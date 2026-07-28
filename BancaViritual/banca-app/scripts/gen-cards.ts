@@ -84,10 +84,9 @@ function svg(p: PropertyDef): string {
   <rect x="0" y="0" width="${W}" height="${H}" rx="18" fill="url(#bg)" stroke="#1e4d3c"/>
   <rect x="0" y="0" width="${W}" height="120" rx="18" fill="${g.color}"/>
   <rect x="0" y="90" width="${W}" height="30" fill="${g.color}"/>
-  <text x="${W / 2}" y="72" text-anchor="middle" class="em">${p.emoji}</text>
-  <text x="${W / 2}" y="108" text-anchor="middle" class="gl">${esc(g.label.toUpperCase())}${railOrUtil ? '' : ` · ${p.colorGroup.toUpperCase()}`}</text>
-  ${nameLines.map((l, i) => `<text x="${W / 2}" y="${158 + i * 26}" text-anchor="middle" class="nm">${esc(l)}</text>`).join('')}
-  <line x1="16" y1="188" x2="${W - 16}" y2="188" class="div"/>
+  <text x="${W / 2}" y="60" text-anchor="middle" class="em">${p.emoji}</text>
+  ${nameLines.map((l, i) => `<text x="${W / 2}" y="${100 + i * 24}" text-anchor="middle" class="nm">${esc(l)}</text>`).join('')}
+  <line x1="16" y1="150" x2="${W - 16}" y2="150" class="div"/>
   ${rentSvg}
   <line x1="16" y1="${footY - 22}" x2="${W - 16}" y2="${footY - 22}" class="div"/>
   ${footSvg}

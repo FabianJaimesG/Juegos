@@ -1,11 +1,19 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
+  /* Paleta clara "familiar" tipo tablero de Monopoly */
+  --bg: #eaf0e2;
+  --card: #ffffff;
+  --ink: #22332b;
+  --muted: #5f7468;
+  --line: #d6e0d1;
+  --green: #1f7a52;
+  --green-d: #16603f;
 }
 
 html, body {
   margin: 0;
-  background: #071811;
-  color: #e8f2ec;
+  background: var(--bg);
+  color: var(--ink);
   font-family: system-ui, sans-serif;
   min-height: 100%;
 }

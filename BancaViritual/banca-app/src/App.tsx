@@ -7,12 +7,17 @@ import {
   bankBuildingsLeft,
   createGame,
   type GameSettings,
+  holdingsOf,
+  ownsFullGroup,
+  type PendingTrade,
   playerBuildings,
   playerEquity,
   playerNetWorth,
+  playerRailUtil,
   type RuntimePlayer,
 } from './game/engine';
 import { canBuildOn } from './domain/wealth';
+import type { Property } from './domain/Property';
 import { blip, speak } from './game/feedback';
 import { useGame } from './game/useGame';
 import { useRealtimeSync } from './game/sync';
@@ -28,15 +33,33 @@ type Sheet =
   | { kind: 'props'; playerId: string }
   | { kind: 'market'; playerId: string }
   | { kind: 'trade'; playerId: string }
+  | { kind: 'edit'; playerId: string }
   | { kind: 'settings' }
   | { kind: 'chart' };
 
 const PLAYER_COLOR = (i: number) => PLAYER_COLORS[i % PLAYER_COLORS.length];
 
+const EMOJIS = ['🙂', '😎', '🤠', '👑', '🐶', '🐱', '🦊', '🐸', '🐵', '🦁', '🐯', '🐼', '🚗', '🚀', '⚽', '🎩', '💎', '🍕', '🎸', '🌟'];
+const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+const rand6 = () => Math.floor(Math.random() * 6) + 1;
+
+/** Renta actual de una propiedad según la situación del dueño (grupo completo / casas). */
+function currentRentText(me: RuntimePlayer, prop: Property, houses: number): number | string {
+  if (prop.kind === 'utility') {
+    const { utilities } = playerRailUtil(me);
+    return `🎲 ×${utilities >= 2 ? 10 : 4}`;
+  }
+  const full = ownsFullGroup(holdingsOf(me), prop.colorGroup);
+  const { railroads } = playerRailUtil(me);
+  return prop.rent({ houses, ownerHasFullGroup: full, railroadsOwned: railroads, utilitiesOwned: 0, diceTotal: 0 });
+}
+
 export default function App() {
   const { state, act, undo, redo, reset, canUndo, canRedo } = useGame();
   const [sheet, setSheet] = useState<Sheet>({ kind: 'none' });
   const [newName, setNewName] = useState('');
+  const [newIcon, setNewIcon] = useState(EMOJIS[0]);
+  const [newColor, setNewColor] = useState(0);
 
   const sym = state.currencySymbol;
   const money = (n: number) => `${sym}${n.toLocaleString('es')}`;
@@ -105,19 +128,27 @@ export default function App() {
       {turnPlayer && (
         <div className="turnbar">
           <span className="turnbar__who">Turno: <b>{turnPlayer.icon} {turnPlayer.name}</b></span>
-          {state.dice && (
-            <span className="turnbar__dice">🎲 {state.dice.a} + {state.dice.b} = {state.dice.a + state.dice.b}{state.dice.special ? ` · ${state.dice.special}` : ''}</span>
-          )}
+          {state.settings.dice && <DiceView dice={state.dice} onRoll={() => act({ type: 'ROLL_DICE' })} />}
           <span className="turnbar__btns">
-            {state.settings.dice && <button onClick={() => act({ type: 'ROLL_DICE' })}>Tirar dados</button>}
             <button onClick={() => act({ type: 'NEXT_TURN' })}>Siguiente turno →</button>
           </span>
         </div>
       )}
 
+      {state.pendingTrade && (
+        <PendingTradeBanner trade={state.pendingTrade} players={state.players} act={act} money={money} />
+      )}
+
       <section className="players">
         {state.players.map((p) => (
-          <PlayerTile key={p.id} p={p} money={money} onOpen={(k) => setSheet({ kind: k, playerId: p.id })} />
+          <PlayerTile
+            key={p.id}
+            p={p}
+            money={money}
+            isCurrent={p.id === turnPlayer?.id}
+            canTrade={!state.pendingTrade && state.players.length >= 2}
+            onOpen={(k) => setSheet({ kind: k, playerId: p.id })}
+          />
         ))}
         {state.players.length === 0 && <p className="empty">Agrega jugadores para empezar.</p>}
       </section>
@@ -127,12 +158,14 @@ export default function App() {
         onSubmit={(e) => {
           e.preventDefault();
           if (!newName.trim()) return;
-          act({ type: 'ADD_PLAYER', name: newName });
+          act({ type: 'ADD_PLAYER', name: newName, icon: newIcon, colorIndex: newColor });
           setNewName('');
+          setNewColor((newColor + 1) % PLAYER_COLORS.length);
         }}
       >
-        <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nombre del jugador" maxLength={16} />
+        <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nombre del jugador" maxLength={16} />
         <button type="submit">+ Agregar</button>
+        <CharacterPicker icon={newIcon} colorIndex={newColor} onIcon={setNewIcon} onColor={setNewColor} />
       </form>
 
       {sheet.kind !== 'none' && (
@@ -154,14 +187,23 @@ export default function App() {
   );
 }
 
-function PlayerTile({ p, money, onOpen }: { p: RuntimePlayer; money: (n: number) => string; onOpen: (k: Sheet['kind']) => void }) {
+function PlayerTile({
+  p, money, isCurrent, canTrade, onOpen,
+}: {
+  p: RuntimePlayer;
+  money: (n: number) => string;
+  isCurrent: boolean;
+  canTrade: boolean;
+  onOpen: (k: Sheet['kind']) => void;
+}) {
   const nw = playerNetWorth(p);
   const b = playerBuildings(p);
-  const color = PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length];
+  const color = PLAYER_COLOR(p.colorIndex);
   return (
-    <article className="ptile" style={{ borderTopColor: color }}>
+    <article className={`ptile ${isCurrent ? 'ptile--current' : ''}`} style={{ borderTopColor: color }}>
       <div className="ptile__head">
-        <span className="ptile__name">{p.icon} {p.name}</span>
+        <span className="ptile__name">{p.icon} {p.name} {isCurrent && '⭐'}</span>
+        <button className="ptile__edit" title="Editar personaje" onClick={() => onOpen('edit')}>✏️</button>
       </div>
       <div className="ptile__cash">{money(p.cash)}</div>
       <div className="ptile__stats">
@@ -173,7 +215,7 @@ function PlayerTile({ p, money, onOpen }: { p: RuntimePlayer; money: (n: number)
         <button className="b-in" onClick={() => onOpen('collect')}>Cobrar</button>
         <button className="b-out" onClick={() => onOpen('pay')}>Pagar</button>
         <button className="b-prop" onClick={() => onOpen('props')}>Propiedades</button>
-        <button className="b-trade" onClick={() => onOpen('trade')}>Negociar</button>
+        {isCurrent && canTrade && <button className="b-trade" onClick={() => onOpen('trade')}>Negociar</button>}
       </div>
     </article>
   );
@@ -209,6 +251,10 @@ function SheetContent({
 
   const me = state.players.find((p) => p.id === sheet.playerId);
   if (!me) return null;
+
+  if (sheet.kind === 'edit') {
+    return <PlayerEditPanel me={me} act={act} close={close} />;
+  }
 
   if (sheet.kind === 'collect') {
     return (
@@ -278,7 +324,7 @@ function AmountForm({
       <h2>{title}</h2>
       <input autoFocus inputMode="numeric" value={amt} onChange={(e) => setAmt(e.target.value.replace(/\D/g, ''))} placeholder="Monto" />
       <div className="quick">
-        {[10, 50, 100, 200, 500].map((q) => (
+        {[1, 2, 10, 50, 100, 200].map((q) => (
           <button key={q} onClick={() => setAmt(String(n + q))}>+{q}</button>
         ))}
         <button onClick={() => setAmt('')}>C</button>
@@ -311,7 +357,7 @@ function PayForm({
       <p className="hint">Sin seleccionar nadie → paga al <b>banco</b>. Con jugadores → transfiere {money(n)} a cada uno.</p>
       <input autoFocus inputMode="numeric" value={amt} onChange={(e) => setAmt(e.target.value.replace(/\D/g, ''))} placeholder="Monto" />
       <div className="quick">
-        {[10, 50, 100, 200, 500].map((q) => (
+        {[1, 2, 10, 50, 100, 200].map((q) => (
           <button key={q} onClick={() => setAmt(String(n + q))}>+{q}</button>
         ))}
         <button onClick={() => setAmt('')}>C</button>
@@ -368,7 +414,13 @@ function PropsPanel({
           const buildable = canBuildOn({ cash: me.cash, holdings: me.holdings }, h.propertyId);
           return (
             <div key={h.propertyId} className="owned">
-              <PropertyCard property={prop} houses={h.houses} mortgaged={h.mortgaged} compact />
+              <PropertyCard
+                property={prop}
+                houses={h.houses}
+                mortgaged={h.mortgaged}
+                currentRent={h.mortgaged ? 0 : currentRentText(me, prop, h.houses)}
+                compact
+              />
               <div className="owned__btns">
                 {!h.mortgaged ? (
                   <button disabled={h.houses > 0} onClick={() => act({ type: 'MORTGAGE', playerId: me.id, propertyId: h.propertyId })}>
@@ -515,11 +567,127 @@ function TradePanel({
         className="confirm"
         disabled={!valid}
         onClick={() => {
-          act({ type: 'TRADE', aId: me.id, bId: other.id, aCash: nA, bCash: nB, aProps, bProps });
+          act({ type: 'PROPOSE_TRADE', trade: { aId: me.id, bId: other.id, aCash: nA, bCash: nB, aProps, bProps } });
           close();
         }}
       >
-        {valid ? 'Confirmar intercambio' : nothing ? 'Selecciona algo para intercambiar' : 'Fondos insuficientes'}
+        {valid ? `Proponer a ${other.name}` : nothing ? 'Selecciona algo para intercambiar' : 'Fondos insuficientes'}
+      </button>
+    </div>
+  );
+}
+
+function CharacterPicker({ icon, colorIndex, onIcon, onColor }: {
+  icon: string;
+  colorIndex: number;
+  onIcon: (e: string) => void;
+  onColor: (i: number) => void;
+}) {
+  return (
+    <div className="picker">
+      <div className="emojirow">
+        {EMOJIS.map((e) => (
+          <button type="button" key={e} className={`emojibtn ${e === icon ? 'emojibtn--on' : ''}`} onClick={() => onIcon(e)}>{e}</button>
+        ))}
+      </div>
+      <div className="colorrow">
+        {PLAYER_COLORS.map((c, i) => (
+          <button
+            type="button"
+            key={c}
+            className={`colordot ${i === colorIndex ? 'colordot--on' : ''}`}
+            style={{ background: c }}
+            onClick={() => onColor(i)}
+            aria-label={`color ${i + 1}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DiceView({ dice, onRoll }: {
+  dice: { a: number; b: number; special: string | null } | null;
+  onRoll: () => void;
+}) {
+  const [rolling, setRolling] = useState(false);
+  const [faces, setFaces] = useState<[number, number]>([1, 1]);
+  const roll = () => {
+    if (rolling) return;
+    setRolling(true);
+    const iv = setInterval(() => setFaces([rand6(), rand6()]), 80);
+    setTimeout(() => {
+      clearInterval(iv);
+      setRolling(false);
+      onRoll();
+    }, 700);
+  };
+  const a = rolling ? faces[0] : dice?.a ?? 1;
+  const b = rolling ? faces[1] : dice?.b ?? 1;
+  return (
+    <span className="turnbar__dice">
+      <span className={`die ${rolling ? 'die--rolling' : ''}`}>{DICE_FACES[a - 1]}</span>
+      <span className={`die ${rolling ? 'die--rolling' : ''}`}>{DICE_FACES[b - 1]}</span>
+      {!rolling && dice && <span>= {dice.a + dice.b}{dice.special ? ` · ${dice.special}` : ''}</span>}
+      <button onClick={roll} disabled={rolling}>{rolling ? '…' : 'Tirar'}</button>
+    </span>
+  );
+}
+
+function PendingTradeBanner({ trade, players, act, money }: {
+  trade: PendingTrade;
+  players: RuntimePlayer[];
+  act: ReturnType<typeof useGame>['act'];
+  money: (n: number) => string;
+}) {
+  const A = players.find((p) => p.id === trade.aId);
+  const B = players.find((p) => p.id === trade.bId);
+  const nm = (ids: string[]) => ids.map((id) => getProperty(id)?.name ?? id).join(', ');
+  const side = (cash: number, props: string[]) => {
+    const parts = [cash ? money(cash) : '', props.length ? nm(props) : ''].filter(Boolean);
+    return parts.length ? parts.join(' + ') : 'nada';
+  };
+  return (
+    <div className="tradebanner">
+      <h3>🤝 Negociación en proceso</h3>
+      <div className="tradebanner__detail">
+        <b>{A?.icon} {A?.name}</b> ofrece: {side(trade.aCash, trade.aProps)}<br />
+        <b>{B?.icon} {B?.name}</b> ofrece: {side(trade.bCash, trade.bProps)}
+      </div>
+      <p className="hint">Debe responder <b>{B?.name}</b>. (Los demás solo ven la negociación en proceso.)</p>
+      <div className="tradebanner__btns">
+        <button className="t-accept" onClick={() => act({ type: 'ACCEPT_TRADE' })}>✅ {B?.name} acepta</button>
+        <button className="t-reject" onClick={() => act({ type: 'REJECT_TRADE' })}>❌ Rechazar</button>
+      </div>
+    </div>
+  );
+}
+
+function PlayerEditPanel({ me, act, close }: {
+  me: RuntimePlayer;
+  act: ReturnType<typeof useGame>['act'];
+  close: () => void;
+}) {
+  const [name, setName] = useState(me.name);
+  const [icon, setIcon] = useState(me.icon);
+  const [color, setColor] = useState(me.colorIndex);
+  return (
+    <div className="form">
+      <h2>Editar personaje</h2>
+      <input type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength={16} />
+      <CharacterPicker icon={icon} colorIndex={color} onIcon={setIcon} onColor={setColor} />
+      <button
+        className="confirm"
+        onClick={() => { act({ type: 'EDIT_PLAYER', playerId: me.id, name, icon, colorIndex: color }); close(); }}
+      >
+        Guardar
+      </button>
+      <button
+        className="salida"
+        style={{ background: '#b91c1c' }}
+        onClick={() => { if (confirm(`¿Quitar a ${me.name}?`)) { act({ type: 'REMOVE_PLAYER', playerId: me.id }); close(); } }}
+      >
+        Quitar jugador
       </button>
     </div>
   );

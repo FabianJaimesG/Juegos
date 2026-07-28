@@ -41,6 +41,17 @@ export interface DiceRoll {
   special: string | null;
 }
 
+/** Propuesta de negociación pendiente de que B acepte o rechace. */
+export interface PendingTrade {
+  id: string;
+  aId: string; // proponente
+  bId: string; // contraparte que debe responder
+  aCash: number;
+  bCash: number;
+  aProps: string[];
+  bProps: string[];
+}
+
 export interface GameState {
   id: string;
   code: string;
@@ -50,13 +61,19 @@ export interface GameState {
   log: LogEntry[];
   settings: GameSettings;
   dice: DiceRoll | null;
+  pendingTrade: PendingTrade | null;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = { dice: true, special: true, sound: true, voice: true };
 
 /** Rellena campos nuevos en estados antiguos (localStorage / remoto). */
 export function hydrate(s: GameState): GameState {
-  return { ...s, settings: { ...DEFAULT_SETTINGS, ...(s.settings ?? {}) }, dice: s.dice ?? null };
+  return {
+    ...s,
+    settings: { ...DEFAULT_SETTINGS, ...(s.settings ?? {}) },
+    dice: s.dice ?? null,
+    pendingTrade: s.pendingTrade ?? null,
+  };
 }
 
 export type Action =
@@ -72,21 +89,18 @@ export type Action =
   | { type: 'UNMORTGAGE'; playerId: string; propertyId: string }
   | { type: 'BUILD_HOUSE'; playerId: string; propertyId: string }
   | { type: 'SELL_HOUSE'; playerId: string; propertyId: string }
-  | {
-      type: 'TRADE';
-      aId: string;
-      bId: string;
-      aCash: number; // dinero que A entrega a B
-      bCash: number; // dinero que B entrega a A
-      aProps: string[]; // propiedades que A entrega a B
-      bProps: string[]; // propiedades que B entrega a A
-    }
+  | { type: 'EDIT_PLAYER'; playerId: string; name?: string; icon?: string; colorIndex?: number }
+  | { type: 'PROPOSE_TRADE'; trade: Omit<PendingTrade, 'id'> }
+  | { type: 'ACCEPT_TRADE' }
+  | { type: 'REJECT_TRADE' }
   | { type: 'ROLL_DICE' }
   | { type: 'SET_SETTINGS'; patch: Partial<GameSettings> }
   | { type: 'NEXT_TURN' }
   | { type: 'REPLACE'; state: GameState }; // para sincronización (Realtime)
 
-const SPECIAL_FACES = ['🎲 dado 1', '🎲 dado 2', '➕ suma', '✖️ dobles', '🔁 relanza', '🚫 pierde turno', '➕6 bonus'];
+// El jugador siempre ve ambos dados y la suma (puede elegir usar uno u otro o ambos).
+// La cara especial añade un efecto sorpresa.
+const SPECIAL_FACES = ['✖️ dobles', '🔁 relanza', '🚫 pierde turno', '➕6 bonus', '🏠 siguiente propiedad'];
 const d6 = () => Math.floor(Math.random() * 6) + 1;
 
 let counter = 0;
@@ -102,6 +116,7 @@ export function createGame(code: string, currencySymbol = '$'): GameState {
     log: [],
     settings: { ...DEFAULT_SETTINGS },
     dice: null,
+    pendingTrade: null,
   };
 }
 
@@ -126,6 +141,54 @@ function mapPlayer(s: GameState, id: string, fn: (p: RuntimePlayer) => RuntimePl
 }
 
 const palette = 10; // colores disponibles (índices 0..9)
+
+/** Ejecuta una negociación sobre el arreglo de jugadores; null si es inválida. */
+function executeTrade(players: RuntimePlayer[], t: PendingTrade): RuntimePlayer[] | null {
+  const A = players.find((x) => x.id === t.aId);
+  const B = players.find((x) => x.id === t.bId);
+  if (!A || !B || A.id === B.id) return null;
+  if (t.aCash < 0 || t.bCash < 0) return null;
+  if (A.cash < t.aCash || B.cash < t.bCash) return null;
+  const aSet = new Set(t.aProps);
+  const bSet = new Set(t.bProps);
+  const aHold = new Map(A.holdings.map((h) => [h.propertyId, h]));
+  const bHold = new Map(B.holdings.map((h) => [h.propertyId, h]));
+  for (const id of t.aProps) {
+    const h = aHold.get(id);
+    if (!h || h.houses > 0) return null;
+  }
+  for (const id of t.bProps) {
+    const h = bHold.get(id);
+    if (!h || h.houses > 0) return null;
+  }
+  const aGives = A.holdings.filter((h) => aSet.has(h.propertyId)); // van a B (hipoteca incluida)
+  const bGives = B.holdings.filter((h) => bSet.has(h.propertyId)); // van a A
+  const newA: RuntimePlayer = {
+    ...A,
+    cash: A.cash - t.aCash + t.bCash,
+    holdings: [...A.holdings.filter((h) => !aSet.has(h.propertyId)), ...bGives],
+  };
+  const newB: RuntimePlayer = {
+    ...B,
+    cash: B.cash - t.bCash + t.aCash,
+    holdings: [...B.holdings.filter((h) => !bSet.has(h.propertyId)), ...aGives],
+  };
+  return players.map((p) => (p.id === A.id ? newA : p.id === B.id ? newB : p));
+}
+
+/** Texto legible del intercambio (para el log de "aceptada"). */
+function tradeDetail(s: GameState, t: PendingTrade): string {
+  const A = s.players.find((x) => x.id === t.aId);
+  const B = s.players.find((x) => x.id === t.bId);
+  const nm = (ids: string[]) => ids.map((id) => getProperty(id)?.name ?? id).join(', ');
+  const parts = [
+    t.aProps.length ? `${A?.name} dio ${nm(t.aProps)}` : '',
+    t.aCash ? `${A?.name} dio ${t.aCash}` : '',
+    t.bProps.length ? `${B?.name} dio ${nm(t.bProps)}` : '',
+    t.bCash ? `${B?.name} dio ${t.bCash}` : '',
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
 
 export function reducer(s: GameState, a: Action): GameState {
   switch (a.type) {
@@ -303,48 +366,44 @@ export function reducer(s: GameState, a: Action): GameState {
       };
     }
 
-    case 'TRADE': {
-      const A = s.players.find((x) => x.id === a.aId);
-      const B = s.players.find((x) => x.id === a.bId);
-      if (!A || !B || A.id === B.id) return s;
-      if (a.aCash < 0 || a.bCash < 0) return s;
-      if (A.cash < a.aCash || B.cash < a.bCash) return s;
-      const aSet = new Set(a.aProps);
-      const bSet = new Set(a.bProps);
-      const aHold = new Map(A.holdings.map((h) => [h.propertyId, h]));
-      const bHold = new Map(B.holdings.map((h) => [h.propertyId, h]));
-      // A debe poseer aProps (sin casas); B debe poseer bProps (sin casas).
-      for (const id of a.aProps) {
-        const h = aHold.get(id);
-        if (!h || h.houses > 0) return s;
-      }
-      for (const id of a.bProps) {
-        const h = bHold.get(id);
-        if (!h || h.houses > 0) return s;
-      }
-      // Debe haber algo que intercambiar.
-      if (a.aCash === 0 && a.bCash === 0 && a.aProps.length === 0 && a.bProps.length === 0) return s;
+    case 'EDIT_PLAYER':
+      return {
+        ...s,
+        players: mapPlayer(s, a.playerId, (x) => ({
+          ...x,
+          name: a.name?.trim() || x.name,
+          icon: a.icon ?? x.icon,
+          colorIndex: a.colorIndex ?? x.colorIndex,
+        })),
+      };
 
-      const aGives = A.holdings.filter((h) => aSet.has(h.propertyId)); // van a B (tal cual, hipoteca incluida)
-      const bGives = B.holdings.filter((h) => bSet.has(h.propertyId)); // van a A
-      const newA: RuntimePlayer = {
-        ...A,
-        cash: A.cash - a.aCash + a.bCash,
-        holdings: [...A.holdings.filter((h) => !aSet.has(h.propertyId)), ...bGives],
+    case 'PROPOSE_TRADE': {
+      const t = a.trade;
+      const A = s.players.find((x) => x.id === t.aId);
+      const B = s.players.find((x) => x.id === t.bId);
+      if (!A || !B || A.id === B.id) return s;
+      const empty = t.aCash === 0 && t.bCash === 0 && t.aProps.length === 0 && t.bProps.length === 0;
+      if (empty) return s;
+      return {
+        ...s,
+        pendingTrade: { ...t, id: uid() },
+        log: log(s, `${A.name} propone una negociación a ${B.name}`),
       };
-      const newB: RuntimePlayer = {
-        ...B,
-        cash: B.cash - a.bCash + a.aCash,
-        holdings: [...B.holdings.filter((h) => !bSet.has(h.propertyId)), ...aGives],
-      };
-      const players = s.players.map((p) => (p.id === A.id ? newA : p.id === B.id ? newB : p));
-      const detail = [
-        a.aProps.length ? `${A.name} da ${a.aProps.length} prop.` : '',
-        a.aCash ? `${A.name} da ${a.aCash}` : '',
-        a.bProps.length ? `${B.name} da ${a.bProps.length} prop.` : '',
-        a.bCash ? `${B.name} da ${a.bCash}` : '',
-      ].filter(Boolean).join(' · ');
-      return { ...s, players, log: log(s, `Negociación ${A.name} ↔ ${B.name}: ${detail}`) };
+    }
+
+    case 'ACCEPT_TRADE': {
+      const t = s.pendingTrade;
+      if (!t) return s;
+      const players = executeTrade(s.players, t);
+      if (!players) return { ...s, pendingTrade: null, log: log(s, 'Negociación inválida, cancelada') };
+      return { ...s, players, pendingTrade: null, log: log(s, `Negociación aceptada — ${tradeDetail(s, t)}`) };
+    }
+
+    case 'REJECT_TRADE': {
+      const t = s.pendingTrade;
+      if (!t) return s;
+      const B = s.players.find((x) => x.id === t.bId);
+      return { ...s, pendingTrade: null, log: log(s, `${B?.name ?? 'Jugador'} rechazó la negociación`) };
     }
 
     case 'ROLL_DICE': {
