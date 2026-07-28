@@ -20,6 +20,8 @@ export interface RuntimePlayer {
   cash: number;
   bankrupt: boolean;
   holdings: Holding[];
+  /** Administrador: su dispositivo puede operar a todos los jugadores. */
+  admin: boolean;
 }
 
 export interface LogEntry {
@@ -33,6 +35,8 @@ export interface GameSettings {
   special: boolean;
   sound: boolean;
   voice: boolean;
+  /** Dinero inicial por jugador (configurable en la preparación). */
+  initialBalance: number;
 }
 
 export interface DiceRoll {
@@ -62,9 +66,17 @@ export interface GameState {
   settings: GameSettings;
   dice: DiceRoll | null;
   pendingTrade: PendingTrade | null;
+  /** false = pantalla de preparación; true = partida en curso. */
+  started: boolean;
 }
 
-export const DEFAULT_SETTINGS: GameSettings = { dice: true, special: true, sound: true, voice: true };
+export const DEFAULT_SETTINGS: GameSettings = {
+  dice: true,
+  special: true,
+  sound: true,
+  voice: true,
+  initialBalance: GAME_CONFIG.initialBalance,
+};
 
 /** Rellena campos nuevos en estados antiguos (localStorage / remoto). */
 export function hydrate(s: GameState): GameState {
@@ -73,11 +85,16 @@ export function hydrate(s: GameState): GameState {
     settings: { ...DEFAULT_SETTINGS, ...(s.settings ?? {}) },
     dice: s.dice ?? null,
     pendingTrade: s.pendingTrade ?? null,
+    // Estados guardados antes de existir la preparación ya estaban "en curso".
+    started: s.started ?? true,
+    players: (s.players ?? []).map((p) => ({ ...p, admin: p.admin ?? false })),
   };
 }
 
 export type Action =
-  | { type: 'ADD_PLAYER'; name: string; icon?: string; colorIndex?: number }
+  | { type: 'ADD_PLAYER'; name: string; icon?: string; colorIndex?: number; admin?: boolean }
+  | { type: 'START_GAME' }
+  | { type: 'REORDER_PLAYER'; playerId: string; dir: -1 | 1 }
   | { type: 'REMOVE_PLAYER'; playerId: string }
   | { type: 'BANK_TO_PLAYER'; playerId: string; amount: number } // cobrar del banco
   | { type: 'PLAYER_TO_BANK'; playerId: string; amount: number } // pagar al banco
@@ -89,7 +106,7 @@ export type Action =
   | { type: 'UNMORTGAGE'; playerId: string; propertyId: string }
   | { type: 'BUILD_HOUSE'; playerId: string; propertyId: string }
   | { type: 'SELL_HOUSE'; playerId: string; propertyId: string }
-  | { type: 'EDIT_PLAYER'; playerId: string; name?: string; icon?: string; colorIndex?: number }
+  | { type: 'EDIT_PLAYER'; playerId: string; name?: string; icon?: string; colorIndex?: number; admin?: boolean }
   | { type: 'PROPOSE_TRADE'; trade: Omit<PendingTrade, 'id'> }
   | { type: 'ACCEPT_TRADE' }
   | { type: 'REJECT_TRADE' }
@@ -117,6 +134,7 @@ export function createGame(code: string, currencySymbol = '$'): GameState {
     settings: { ...DEFAULT_SETTINGS },
     dice: null,
     pendingTrade: null,
+    started: false,
   };
 }
 
@@ -199,15 +217,32 @@ export function reducer(s: GameState, a: Action): GameState {
         name: a.name.trim() || `Jugador ${s.players.length + 1}`,
         icon: a.icon ?? '🙂',
         colorIndex,
-        cash: GAME_CONFIG.initialBalance,
+        cash: s.settings.initialBalance,
         bankrupt: false,
         holdings: [],
+        admin: a.admin ?? false,
       };
       return { ...s, players: [...s.players, p], log: log(s, `Se unió ${p.name}`) };
     }
 
     case 'REMOVE_PLAYER':
       return { ...s, players: s.players.filter((p) => p.id !== a.playerId) };
+
+    case 'START_GAME': {
+      if (s.players.length === 0) return s;
+      // Aplica el dinero inicial configurado y comienza en el primer jugador.
+      const players = s.players.map((p) => ({ ...p, cash: s.settings.initialBalance }));
+      return { ...s, players, started: true, turnIndex: 0, log: log(s, '¡Empieza la partida!') };
+    }
+
+    case 'REORDER_PLAYER': {
+      const i = s.players.findIndex((p) => p.id === a.playerId);
+      const j = i + a.dir;
+      if (i < 0 || j < 0 || j >= s.players.length) return s;
+      const players = [...s.players];
+      [players[i], players[j]] = [players[j], players[i]];
+      return { ...s, players };
+    }
 
     case 'BANK_TO_PLAYER': {
       const p = s.players.find((x) => x.id === a.playerId);
@@ -374,6 +409,7 @@ export function reducer(s: GameState, a: Action): GameState {
           name: a.name?.trim() || x.name,
           icon: a.icon ?? x.icon,
           colorIndex: a.colorIndex ?? x.colorIndex,
+          admin: a.admin ?? x.admin,
         })),
       };
 

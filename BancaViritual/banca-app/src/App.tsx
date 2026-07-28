@@ -7,7 +7,9 @@ import {
   bankBuildingsLeft,
   createGame,
   type GameSettings,
+  type GameState,
   holdingsOf,
+  type LogEntry,
   ownsFullGroup,
   type PendingTrade,
   playerBuildings,
@@ -20,6 +22,7 @@ import { canBuildOn } from './domain/wealth';
 import type { Property } from './domain/Property';
 import { blip, speak } from './game/feedback';
 import { useGame } from './game/useGame';
+import { useIdentity } from './game/useIdentity';
 import { useRealtimeSync } from './game/sync';
 import { useWealthHistory } from './game/useWealthHistory';
 import { hasSupabase } from './lib/supabase';
@@ -35,7 +38,8 @@ type Sheet =
   | { kind: 'trade'; playerId: string }
   | { kind: 'edit'; playerId: string }
   | { kind: 'settings' }
-  | { kind: 'chart' };
+  | { kind: 'chart' }
+  | { kind: 'history' };
 
 const PLAYER_COLOR = (i: number) => PLAYER_COLORS[i % PLAYER_COLORS.length];
 
@@ -56,10 +60,8 @@ function currentRentText(me: RuntimePlayer, prop: Property, houses: number): num
 
 export default function App() {
   const { state, act, undo, redo, reset, canUndo, canRedo } = useGame();
+  const { meId, setMe } = useIdentity(state.code);
   const [sheet, setSheet] = useState<Sheet>({ kind: 'none' });
-  const [newName, setNewName] = useState('');
-  const [newIcon, setNewIcon] = useState(EMOJIS[0]);
-  const [newColor, setNewColor] = useState(0);
 
   const sym = state.currencySymbol;
   const money = (n: number) => `${sym}${n.toLocaleString('es')}`;
@@ -106,7 +108,21 @@ export default function App() {
     if (state.settings.voice) speak(top.text);
   }, [state.log, state.settings.sound, state.settings.voice]);
 
+  // ── Fase de preparación ──
+  if (!state.started) {
+    return <SetupScreen state={state} act={act} share={share} onJoin={join} />;
+  }
+
+  // ── Elegir identidad de este dispositivo ──
+  const me = state.players.find((p) => p.id === meId) ?? null;
+  if (state.players.length > 0 && !me) {
+    return <IdentityPicker players={state.players} onPick={setMe} />;
+  }
+
+  const amAdmin = !!me?.admin;
+  const canControl = (pid: string) => amAdmin || me?.id === pid;
   const turnPlayer = state.players[state.turnIndex];
+  const myTurn = !!turnPlayer && canControl(turnPlayer.id);
 
   return (
     <div className="app">
@@ -115,22 +131,29 @@ export default function App() {
           🏦 Banca <span className="code">{hasSupabase ? '🟢' : '⚪'} Sala {state.code}</span>
         </h1>
         <div className="topbar__actions">
-          <button onClick={undo} disabled={!canUndo}>↶</button>
-          <button onClick={redo} disabled={!canRedo}>↷</button>
+          {me && (
+            <button onClick={() => setMe(null)} title="Cambiar de jugador">
+              {me.icon} {me.name}{amAdmin ? ' 🛡️' : ''}
+            </button>
+          )}
+          {amAdmin && <button onClick={undo} disabled={!canUndo}>↶</button>}
+          {amAdmin && <button onClick={redo} disabled={!canRedo}>↷</button>}
+          <button onClick={() => setSheet({ kind: 'history' })} title="Historial de movimientos">📜</button>
           <button onClick={() => setSheet({ kind: 'chart' })} title="Gráfico de patrimonio">📈</button>
           <button onClick={() => setSheet({ kind: 'settings' })} title="Ajustes">⚙️</button>
           <button onClick={share} title="Copiar enlace de invitación">Compartir</button>
-          <button onClick={() => { const c = prompt('Código de sala a la que unirse:'); if (c) join(c); }}>Unirse</button>
-          <button onClick={() => { if (confirm('¿Nueva partida? Se borra la actual.')) reset(); }}>Nueva</button>
+          {amAdmin && <button onClick={() => { if (confirm('¿Nueva partida? Se borra la actual.')) reset(); }}>Nueva</button>}
         </div>
       </header>
 
       {turnPlayer && (
         <div className="turnbar">
-          <span className="turnbar__who">Turno: <b>{turnPlayer.icon} {turnPlayer.name}</b></span>
-          {state.settings.dice && <DiceView dice={state.dice} onRoll={() => act({ type: 'ROLL_DICE' })} />}
+          <span className="turnbar__who">Turno: <b>{turnPlayer.icon} {turnPlayer.name}</b>{myTurn && ' (tú)'}</span>
+          {state.settings.dice && <DiceView dice={state.dice} onRoll={() => act({ type: 'ROLL_DICE' })} canRoll={myTurn} />}
           <span className="turnbar__btns">
-            <button onClick={() => act({ type: 'NEXT_TURN' })}>Siguiente turno →</button>
+            <button onClick={() => act({ type: 'NEXT_TURN' })} disabled={!myTurn} title={myTurn ? '' : 'Solo el jugador en turno'}>
+              Siguiente turno →
+            </button>
           </span>
         </div>
       )}
@@ -146,27 +169,13 @@ export default function App() {
             p={p}
             money={money}
             isCurrent={p.id === turnPlayer?.id}
+            canControl={canControl(p.id)}
             canTrade={!state.pendingTrade && state.players.length >= 2}
             onOpen={(k) => setSheet({ kind: k, playerId: p.id })}
+            onSalida={() => act({ type: 'SALIDA', playerId: p.id })}
           />
         ))}
-        {state.players.length === 0 && <p className="empty">Agrega jugadores para empezar.</p>}
       </section>
-
-      <form
-        className="addplayer"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!newName.trim()) return;
-          act({ type: 'ADD_PLAYER', name: newName, icon: newIcon, colorIndex: newColor });
-          setNewName('');
-          setNewColor((newColor + 1) % PLAYER_COLORS.length);
-        }}
-      >
-        <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nombre del jugador" maxLength={16} />
-        <button type="submit">+ Agregar</button>
-        <CharacterPicker icon={newIcon} colorIndex={newColor} onIcon={setNewIcon} onColor={setNewColor} />
-      </form>
 
       {sheet.kind !== 'none' && (
         <div className="overlay" onClick={() => setSheet({ kind: 'none' })}>
@@ -177,6 +186,7 @@ export default function App() {
               act={act}
               money={money}
               history={history}
+              canControl={canControl}
               close={() => setSheet({ kind: 'none' })}
               goMarket={(playerId) => setSheet({ kind: 'market', playerId })}
             />
@@ -188,22 +198,24 @@ export default function App() {
 }
 
 function PlayerTile({
-  p, money, isCurrent, canTrade, onOpen,
+  p, money, isCurrent, canControl, canTrade, onOpen, onSalida,
 }: {
   p: RuntimePlayer;
   money: (n: number) => string;
   isCurrent: boolean;
+  canControl: boolean;
   canTrade: boolean;
   onOpen: (k: Sheet['kind']) => void;
+  onSalida: () => void;
 }) {
   const nw = playerNetWorth(p);
   const b = playerBuildings(p);
   const color = PLAYER_COLOR(p.colorIndex);
   return (
-    <article className={`ptile ${isCurrent ? 'ptile--current' : ''}`} style={{ borderTopColor: color }}>
+    <article className={`ptile ${isCurrent ? 'ptile--current' : ''} ${canControl ? '' : 'ptile--other'}`} style={{ borderTopColor: color }}>
       <div className="ptile__head">
-        <span className="ptile__name">{p.icon} {p.name} {isCurrent && '⭐'}</span>
-        <button className="ptile__edit" title="Editar personaje" onClick={() => onOpen('edit')}>✏️</button>
+        <span className="ptile__name">{p.icon} {p.name} {isCurrent && '⭐'} {p.admin && '🛡️'}</span>
+        {canControl && <button className="ptile__edit" title="Editar personaje" onClick={() => onOpen('edit')}>✏️</button>}
       </div>
       <div className="ptile__cash">{money(p.cash)}</div>
       <div className="ptile__stats">
@@ -212,23 +224,31 @@ function PlayerTile({
         <span title="Casas / Hoteles">🏠 {b.houses} · 🏨 {b.hotels}</span>
       </div>
       <div className="ptile__btns">
-        <button className="b-in" onClick={() => onOpen('collect')}>Cobrar</button>
-        <button className="b-out" onClick={() => onOpen('pay')}>Pagar</button>
-        <button className="b-prop" onClick={() => onOpen('props')}>Propiedades</button>
-        {isCurrent && canTrade && <button className="b-trade" onClick={() => onOpen('trade')}>Negociar</button>}
+        {canControl ? (
+          <>
+            <button className="b-in" onClick={() => onOpen('collect')}>Cobrar</button>
+            <button className="b-out" onClick={() => onOpen('pay')}>Pagar</button>
+            <button className="b-prop" onClick={() => onOpen('props')}>Propiedades</button>
+            <button className="b-salida" onClick={onSalida}>🟢 Salida</button>
+            {isCurrent && canTrade && <button className="b-trade" onClick={() => onOpen('trade')}>Negociar</button>}
+          </>
+        ) : (
+          <button className="b-prop" onClick={() => onOpen('props')}>Ver propiedades</button>
+        )}
       </div>
     </article>
   );
 }
 
 function SheetContent({
-  sheet, state, act, money, history, close, goMarket,
+  sheet, state, act, money, history, canControl, close, goMarket,
 }: {
   sheet: Sheet;
   state: ReturnType<typeof useGame>['state'];
   act: ReturnType<typeof useGame>['act'];
   money: (n: number) => string;
   history: ReturnType<typeof useWealthHistory>;
+  canControl: (pid: string) => boolean;
   close: () => void;
   goMarket: (playerId: string) => void;
 }) {
@@ -236,6 +256,10 @@ function SheetContent({
 
   if (sheet.kind === 'settings') {
     return <SettingsPanel settings={state.settings} setSettings={(patch) => act({ type: 'SET_SETTINGS', patch })} />;
+  }
+
+  if (sheet.kind === 'history') {
+    return <HistoryPanel log={state.log} />;
   }
 
   if (sheet.kind === 'chart') {
@@ -251,24 +275,15 @@ function SheetContent({
 
   const me = state.players.find((p) => p.id === sheet.playerId);
   if (!me) return null;
+  const mine = canControl(me.id);
 
   if (sheet.kind === 'edit') {
     return <PlayerEditPanel me={me} act={act} close={close} />;
   }
 
   if (sheet.kind === 'collect') {
-    return (
-      <AmountForm
-        title={`Cobrar del banco → ${me.name}`}
-        confirmLabel="Cobrar"
-        onConfirm={(amount) => { act({ type: 'BANK_TO_PLAYER', playerId: me.id, amount }); close(); }}
-        extra={
-          <button className="salida" onClick={() => { act({ type: 'SALIDA', playerId: me.id }); close(); }}>
-            🟢 Salida (+cobra al pasar)
-          </button>
-        }
-      />
-    );
+    const others = state.players.filter((p) => p.id !== me.id && !p.bankrupt);
+    return <CollectForm me={me} others={others} act={act} close={close} money={money} />;
   }
 
   if (sheet.kind === 'pay') {
@@ -277,7 +292,7 @@ function SheetContent({
   }
 
   if (sheet.kind === 'props') {
-    return <PropsPanel me={me} act={act} money={money} goMarket={() => goMarket(me.id)} />;
+    return <PropsPanel me={me} act={act} money={money} readOnly={!mine} goMarket={() => goMarket(me.id)} />;
   }
 
   if (sheet.kind === 'market') {
@@ -291,10 +306,12 @@ function SheetContent({
   return null;
 }
 
+type BoolSetting = 'dice' | 'special' | 'sound' | 'voice';
+
 function SettingsPanel({ settings, setSettings }: { settings: GameSettings; setSettings: (patch: Partial<GameSettings>) => void }) {
-  const row = (key: keyof GameSettings, label: string, desc: string) => (
+  const row = (key: BoolSetting, label: string, desc: string) => (
     <label className="setrow">
-      <input type="checkbox" checked={settings[key]} onChange={(e) => setSettings({ [key]: e.target.checked } as Partial<GameSettings>)} />
+      <input type="checkbox" checked={settings[key]} onChange={(e) => setSettings({ [key]: e.target.checked })} />
       <span><b>{label}</b><br /><span className="hint">{desc}</span></span>
     </label>
   );
@@ -309,28 +326,56 @@ function SettingsPanel({ settings, setSettings }: { settings: GameSettings; setS
   );
 }
 
-function AmountForm({
-  title, confirmLabel, onConfirm, extra,
+const QUICKS = [1, 5, 10, 50, 100, 200];
+
+function CollectForm({
+  me, others, act, close, money,
 }: {
-  title: string;
-  confirmLabel: string;
-  onConfirm: (amount: number) => void;
-  extra?: React.ReactNode;
+  me: RuntimePlayer;
+  others: RuntimePlayer[];
+  act: ReturnType<typeof useGame>['act'];
+  close: () => void;
+  money: (n: number) => string;
 }) {
   const [amt, setAmt] = useState('');
+  const [sel, setSel] = useState<string[]>([]);
   const n = parseInt(amt, 10) || 0;
+  const fromBank = sel.length === 0;
+
   return (
     <div className="form">
-      <h2>{title}</h2>
+      <h2>Cobrar — {me.name}</h2>
+      <p className="hint">Sin seleccionar nadie → cobra al <b>banco</b>. Con jugadores → cada uno te paga {money(n)}.</p>
       <input autoFocus inputMode="numeric" value={amt} onChange={(e) => setAmt(e.target.value.replace(/\D/g, ''))} placeholder="Monto" />
       <div className="quick">
-        {[1, 2, 10, 50, 100, 200].map((q) => (
+        {QUICKS.map((q) => (
           <button key={q} onClick={() => setAmt(String(n + q))}>+{q}</button>
         ))}
         <button onClick={() => setAmt('')}>C</button>
       </div>
-      {extra}
-      <button className="confirm" disabled={n <= 0} onClick={() => onConfirm(n)}>{confirmLabel}</button>
+      <div className="chips">
+        {others.map((o) => (
+          <button
+            key={o.id}
+            className={sel.includes(o.id) ? 'chip chip--on' : 'chip'}
+            onClick={() => setSel((s) => (s.includes(o.id) ? s.filter((x) => x !== o.id) : [...s, o.id]))}
+          >
+            {o.icon} {o.name}
+          </button>
+        ))}
+      </div>
+      {sel.length > 1 && <p className="hint">Total a recibir: {money(n * sel.length)}</p>}
+      <button
+        className="confirm"
+        disabled={n <= 0}
+        onClick={() => {
+          if (fromBank) act({ type: 'BANK_TO_PLAYER', playerId: me.id, amount: n });
+          else act({ type: 'COLLECT', toId: me.id, fromIds: sel, amount: n });
+          close();
+        }}
+      >
+        {fromBank ? 'Cobrar al banco' : sel.length > 1 ? `Cobrar a ${sel.length}` : 'Cobrar'}
+      </button>
     </div>
   );
 }
@@ -353,11 +398,11 @@ function PayForm({
 
   return (
     <div className="form">
-      <h2>Pagar / Transferir — {me.name}</h2>
+      <h2>Pagar — {me.name}</h2>
       <p className="hint">Sin seleccionar nadie → paga al <b>banco</b>. Con jugadores → transfiere {money(n)} a cada uno.</p>
       <input autoFocus inputMode="numeric" value={amt} onChange={(e) => setAmt(e.target.value.replace(/\D/g, ''))} placeholder="Monto" />
       <div className="quick">
-        {[1, 2, 10, 50, 100, 200].map((q) => (
+        {QUICKS.map((q) => (
           <button key={q} onClick={() => setAmt(String(n + q))}>+{q}</button>
         ))}
         <button onClick={() => setAmt('')}>C</button>
@@ -391,22 +436,23 @@ function PayForm({
 }
 
 function PropsPanel({
-  me, act, money, goMarket,
+  me, act, money, readOnly, goMarket,
 }: {
   me: RuntimePlayer;
   act: ReturnType<typeof useGame>['act'];
   money: (n: number) => string;
+  readOnly?: boolean;
   goMarket: () => void;
 }) {
   return (
     <div className="form">
-      <h2>Propiedades de {me.name}</h2>
+      <h2>Propiedades de {me.name}{readOnly ? ' (solo lectura)' : ''}</h2>
       <div className="wealth">
         <span>💵 {money(me.cash)}</span>
         <span>🏦 {money(playerEquity(me))} en bienes</span>
         <span>💎 {money(playerNetWorth(me))} total</span>
       </div>
-      <button className="confirm" onClick={goMarket}>🛒 Comprar propiedad</button>
+      {!readOnly && <button className="confirm" onClick={goMarket}>🛒 Comprar propiedad</button>}
       <div className="ownedgrid">
         {me.holdings.length === 0 && <p className="hint">Aún no tiene propiedades.</p>}
         {me.holdings.map((h) => {
@@ -421,7 +467,7 @@ function PropsPanel({
                 currentRent={h.mortgaged ? 0 : currentRentText(me, prop, h.houses)}
                 compact
               />
-              <div className="owned__btns">
+              {!readOnly && <div className="owned__btns">
                 {!h.mortgaged ? (
                   <button disabled={h.houses > 0} onClick={() => act({ type: 'MORTGAGE', playerId: me.id, propertyId: h.propertyId })}>
                     Hipotecar +{money(prop.mortgageValue)}
@@ -441,7 +487,7 @@ function PropsPanel({
                     </button>
                   </>
                 )}
-              </div>
+              </div>}
             </div>
           );
         })}
@@ -606,14 +652,15 @@ function CharacterPicker({ icon, colorIndex, onIcon, onColor }: {
   );
 }
 
-function DiceView({ dice, onRoll }: {
+function DiceView({ dice, onRoll, canRoll }: {
   dice: { a: number; b: number; special: string | null } | null;
   onRoll: () => void;
+  canRoll: boolean;
 }) {
   const [rolling, setRolling] = useState(false);
   const [faces, setFaces] = useState<[number, number]>([1, 1]);
   const roll = () => {
-    if (rolling) return;
+    if (rolling || !canRoll) return;
     setRolling(true);
     const iv = setInterval(() => setFaces([rand6(), rand6()]), 80);
     setTimeout(() => {
@@ -629,7 +676,7 @@ function DiceView({ dice, onRoll }: {
       <span className={`die ${rolling ? 'die--rolling' : ''}`}>{DICE_FACES[a - 1]}</span>
       <span className={`die ${rolling ? 'die--rolling' : ''}`}>{DICE_FACES[b - 1]}</span>
       {!rolling && dice && <span>= {dice.a + dice.b}{dice.special ? ` · ${dice.special}` : ''}</span>}
-      <button onClick={roll} disabled={rolling}>{rolling ? '…' : 'Tirar'}</button>
+      {canRoll && <button onClick={roll} disabled={rolling}>{rolling ? '…' : 'Tirar'}</button>}
     </span>
   );
 }
@@ -688,6 +735,113 @@ function PlayerEditPanel({ me, act, close }: {
         onClick={() => { if (confirm(`¿Quitar a ${me.name}?`)) { act({ type: 'REMOVE_PLAYER', playerId: me.id }); close(); } }}
       >
         Quitar jugador
+      </button>
+    </div>
+  );
+}
+
+function HistoryPanel({ log }: { log: LogEntry[] }) {
+  return (
+    <div className="form">
+      <h2>📜 Historial de movimientos</h2>
+      {log.length === 0 && <p className="hint">Sin movimientos aún.</p>}
+      <ul className="histlist">
+        {log.map((e) => (
+          <li key={e.id}>
+            <span className="histtime">{new Date(e.ts).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</span>{' '}
+            {e.text}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function IdentityPicker({ players, onPick }: { players: RuntimePlayer[]; onPick: (id: string) => void }) {
+  return (
+    <div className="setup">
+      <h1>¿Quién juega en este dispositivo?</h1>
+      <p className="hint">Elige tu jugador: solo podrás mover tu propio dinero. Los administradores 🛡️ pueden operar a todos.</p>
+      <div className="idgrid">
+        {players.map((p) => (
+          <button key={p.id} className="idbtn" style={{ borderColor: PLAYER_COLOR(p.colorIndex) }} onClick={() => onPick(p.id)}>
+            <span className="idbtn__icon">{p.icon}</span>
+            <span>{p.name} {p.admin && '🛡️'}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SetupScreen({ state, act, share, onJoin }: {
+  state: GameState;
+  act: ReturnType<typeof useGame>['act'];
+  share: () => void;
+  onJoin: (code: string) => void;
+}) {
+  const [name, setName] = useState('');
+  const [icon, setIcon] = useState(EMOJIS[0]);
+  const [color, setColor] = useState(0);
+  const [admin, setAdmin] = useState(state.players.length === 0);
+  const s = state.settings;
+  const setS = (patch: Partial<GameSettings>) => act({ type: 'SET_SETTINGS', patch });
+
+  return (
+    <div className="setup">
+      <h1>🏦 Banca — Preparación <span className="code">Sala {state.code}</span></h1>
+      <div className="setup__top">
+        <button onClick={share}>🔗 Compartir enlace</button>
+        <button onClick={() => { const c = prompt('Código de sala a la que unirse:'); if (c) onJoin(c); }}>Unirse a otra sala</button>
+      </div>
+
+      <h2>Jugadores ({state.players.length}) — orden de juego</h2>
+      <ol className="setup__players">
+        {state.players.map((p, i) => (
+          <li key={p.id}>
+            <span className="setup__pname" style={{ color: PLAYER_COLOR(p.colorIndex) }}>{i + 1}. {p.icon} {p.name} {p.admin && '🛡️'}</span>
+            <span className="setup__pbtns">
+              <button onClick={() => act({ type: 'REORDER_PLAYER', playerId: p.id, dir: -1 })} disabled={i === 0}>▲</button>
+              <button onClick={() => act({ type: 'REORDER_PLAYER', playerId: p.id, dir: 1 })} disabled={i === state.players.length - 1}>▼</button>
+              <button onClick={() => act({ type: 'EDIT_PLAYER', playerId: p.id, admin: !p.admin })}>{p.admin ? 'Quitar admin' : 'Hacer admin'}</button>
+              <button onClick={() => act({ type: 'REMOVE_PLAYER', playerId: p.id })}>✕</button>
+            </span>
+          </li>
+        ))}
+        {state.players.length === 0 && <p className="hint">Agrega al menos un jugador.</p>}
+      </ol>
+
+      <form
+        className="setup__add"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!name.trim()) return;
+          act({ type: 'ADD_PLAYER', name, icon, colorIndex: color, admin });
+          setName('');
+          setColor((color + 1) % PLAYER_COLORS.length);
+          setAdmin(false);
+        }}
+      >
+        <div className="setup__addrow">
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del jugador" maxLength={16} />
+          <label className="setup__adminchk"><input type="checkbox" checked={admin} onChange={(e) => setAdmin(e.target.checked)} /> 🛡️ Admin</label>
+          <button type="submit">+ Agregar</button>
+        </div>
+        <CharacterPicker icon={icon} colorIndex={color} onIcon={setIcon} onColor={setColor} />
+      </form>
+
+      <h2>Opciones de la partida</h2>
+      <label className="setrow setrow--num">
+        <span><b>Dinero inicial</b><br /><span className="hint">Con cuánto empieza cada jugador.</span></span>
+        <input type="number" min={0} step={50} value={s.initialBalance} onChange={(e) => setS({ initialBalance: Math.max(0, parseInt(e.target.value, 10) || 0) })} />
+      </label>
+      <label className="setrow"><input type="checkbox" checked={s.dice} onChange={(e) => setS({ dice: e.target.checked })} /> <span><b>Dados</b></span></label>
+      <label className="setrow"><input type="checkbox" checked={s.special} onChange={(e) => setS({ special: e.target.checked })} /> <span><b>Dado especial</b></span></label>
+      <label className="setrow"><input type="checkbox" checked={s.sound} onChange={(e) => setS({ sound: e.target.checked })} /> <span><b>Sonido</b></span></label>
+      <label className="setrow"><input type="checkbox" checked={s.voice} onChange={(e) => setS({ voice: e.target.checked })} /> <span><b>Voz</b></span></label>
+
+      <button className="confirm setup__start" disabled={state.players.length < 1} onClick={() => act({ type: 'START_GAME' })}>
+        ▶ Empezar partida
       </button>
     </div>
   );

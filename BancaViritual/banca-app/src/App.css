@@ -57,7 +57,37 @@
 .b-out { background: #b45309; }
 .b-prop { background: #1e6fb0; }
 .b-trade { background: #6d28d9; }
+.b-salida { background: #0d9488; }
 .b-edit { background: #64748b; flex-basis: 100% !important; }
+.ptile--other { opacity: 0.92; }
+
+/* Pantalla de preparación / identidad */
+.setup { max-width: 640px; margin: 0 auto; padding: 1rem 0.9rem 3rem; }
+.setup h1 { font-size: 1.35rem; }
+.setup h2 { font-size: 1.05rem; margin-top: 1.2rem; }
+.setup__top, .setup__add { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.setup__top button { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem 0.8rem; cursor: pointer; }
+.setup__players { list-style: none; padding: 0; margin: 0.5rem 0; }
+.setup__players li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0.5rem 0.7rem; margin-bottom: 0.4rem; }
+.setup__pname { font-weight: 600; }
+.setup__pbtns { display: flex; gap: 0.25rem; }
+.setup__pbtns button { background: #f1f5f0; border: 1px solid var(--line); border-radius: 6px; padding: 0.25rem 0.5rem; cursor: pointer; font-size: 0.8rem; }
+.setup__add { flex-direction: column; align-items: stretch; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0.7rem; margin-top: 0.4rem; }
+.setup__addrow { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.setup__addrow input[type='text'] { flex: 1; min-width: 130px; border: 1px solid var(--line); border-radius: 8px; padding: 0.55rem; font-size: 1rem; }
+.setup__addrow button { background: var(--green); color: #fff; border: 0; border-radius: 8px; padding: 0.55rem 0.9rem; cursor: pointer; }
+.setup__adminchk { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.9rem; }
+.setrow--num input[type='number'] { width: 120px; text-align: right; border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem; font-size: 1.05rem; }
+.setup__start { margin-top: 1.2rem; font-size: 1.15rem; }
+
+.idgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.6rem; margin-top: 1rem; }
+.idbtn { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; background: var(--card); border: 2px solid var(--line); border-radius: 12px; padding: 1rem 0.5rem; cursor: pointer; font-size: 1rem; }
+.idbtn__icon { font-size: 2rem; }
+
+/* Historial */
+.histlist { list-style: none; padding: 0; margin: 0; max-height: 60vh; overflow-y: auto; }
+.histlist li { padding: 0.4rem 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
+.histtime { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.8rem; }
 
 .addplayer { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; align-items: center; }
 .addplayer input[type='text'] {
