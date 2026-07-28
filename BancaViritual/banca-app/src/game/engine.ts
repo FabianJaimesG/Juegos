@@ -50,6 +50,15 @@ export type Action =
   | { type: 'UNMORTGAGE'; playerId: string; propertyId: string }
   | { type: 'BUILD_HOUSE'; playerId: string; propertyId: string }
   | { type: 'SELL_HOUSE'; playerId: string; propertyId: string }
+  | {
+      type: 'TRADE';
+      aId: string;
+      bId: string;
+      aCash: number; // dinero que A entrega a B
+      bCash: number; // dinero que B entrega a A
+      aProps: string[]; // propiedades que A entrega a B
+      bProps: string[]; // propiedades que B entrega a A
+    }
   | { type: 'NEXT_TURN' }
   | { type: 'REPLACE'; state: GameState }; // para sincronización (Realtime)
 
@@ -256,6 +265,50 @@ export function reducer(s: GameState, a: Action): GameState {
         })),
         log: log(s, `${p.name} vendió una casa de ${prop.name} (+${refund})`),
       };
+    }
+
+    case 'TRADE': {
+      const A = s.players.find((x) => x.id === a.aId);
+      const B = s.players.find((x) => x.id === a.bId);
+      if (!A || !B || A.id === B.id) return s;
+      if (a.aCash < 0 || a.bCash < 0) return s;
+      if (A.cash < a.aCash || B.cash < a.bCash) return s;
+      const aSet = new Set(a.aProps);
+      const bSet = new Set(a.bProps);
+      const aHold = new Map(A.holdings.map((h) => [h.propertyId, h]));
+      const bHold = new Map(B.holdings.map((h) => [h.propertyId, h]));
+      // A debe poseer aProps (sin casas); B debe poseer bProps (sin casas).
+      for (const id of a.aProps) {
+        const h = aHold.get(id);
+        if (!h || h.houses > 0) return s;
+      }
+      for (const id of a.bProps) {
+        const h = bHold.get(id);
+        if (!h || h.houses > 0) return s;
+      }
+      // Debe haber algo que intercambiar.
+      if (a.aCash === 0 && a.bCash === 0 && a.aProps.length === 0 && a.bProps.length === 0) return s;
+
+      const aGives = A.holdings.filter((h) => aSet.has(h.propertyId)); // van a B (tal cual, hipoteca incluida)
+      const bGives = B.holdings.filter((h) => bSet.has(h.propertyId)); // van a A
+      const newA: RuntimePlayer = {
+        ...A,
+        cash: A.cash - a.aCash + a.bCash,
+        holdings: [...A.holdings.filter((h) => !aSet.has(h.propertyId)), ...bGives],
+      };
+      const newB: RuntimePlayer = {
+        ...B,
+        cash: B.cash - a.bCash + a.aCash,
+        holdings: [...B.holdings.filter((h) => !bSet.has(h.propertyId)), ...aGives],
+      };
+      const players = s.players.map((p) => (p.id === A.id ? newA : p.id === B.id ? newB : p));
+      const detail = [
+        a.aProps.length ? `${A.name} da ${a.aProps.length} prop.` : '',
+        a.aCash ? `${A.name} da ${a.aCash}` : '',
+        a.bProps.length ? `${B.name} da ${a.bProps.length} prop.` : '',
+        a.bCash ? `${B.name} da ${a.bCash}` : '',
+      ].filter(Boolean).join(' · ');
+      return { ...s, players, log: log(s, `Negociación ${A.name} ↔ ${B.name}: ${detail}`) };
     }
 
     case 'NEXT_TURN': {

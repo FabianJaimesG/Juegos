@@ -46,11 +46,12 @@
 .ptile__name { font-weight: 700; }
 .ptile__cash { font-size: 1.5rem; font-weight: 700; color: #6fe3a6; margin: 0.3rem 0; }
 .ptile__stats { display: flex; flex-wrap: wrap; gap: 0.5rem; font-size: 0.8rem; color: #a9c9ba; margin-bottom: 0.6rem; }
-.ptile__btns { display: flex; gap: 0.35rem; }
-.ptile__btns button { flex: 1; border: 0; border-radius: 8px; padding: 0.45rem 0; cursor: pointer; font-size: 0.85rem; color: #fff; }
+.ptile__btns { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.ptile__btns button { flex: 1 1 45%; border: 0; border-radius: 8px; padding: 0.45rem 0; cursor: pointer; font-size: 0.85rem; color: #fff; }
 .b-in { background: #15803d; }
 .b-out { background: #b45309; }
 .b-prop { background: #1e4d7b; }
+.b-trade { background: #6d28d9; }
 
 .addplayer { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
 .addplayer input {
@@ -97,3 +98,13 @@
 .owned__btns button, .buy { background: #12352a; color: #e8f2ec; border: 1px solid #1e4d3c; border-radius: 8px; padding: 0.4rem 0.5rem; cursor: pointer; font-size: 0.78rem; }
 .owned__btns button:disabled, .buy:disabled { opacity: 0.4; cursor: default; }
 .buy { width: 130px; background: #1f7a52; color: #fff; border: 0; }
+
+/* Negociación */
+.tradegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.5rem; }
+.tradecol { background: #0f2a21; border: 1px solid #1e4d3c; border-radius: 10px; padding: 0.6rem; }
+.tradecol h3 { margin: 0 0 0.4rem; font-size: 0.95rem; }
+.tradecash { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; color: #a9c9ba; }
+.tradecash input { width: 100%; background: #0b2018; border: 1px solid #1e4d3c; border-radius: 8px; padding: 0.5rem; color: #e8f2ec; font-size: 1.1rem; text-align: center; }
+.tradeprops { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.4rem; }
+.tradeprop { border: 2px solid transparent; border-radius: 12px; cursor: pointer; }
+.tradeprop--on { border-color: #6fe3a6; box-shadow: 0 0 0 2px rgba(111, 227, 166, 0.3); }

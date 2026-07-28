@@ -19,7 +19,8 @@ type Sheet =
   | { kind: 'pay'; playerId: string }
   | { kind: 'collect'; playerId: string }
   | { kind: 'props'; playerId: string }
-  | { kind: 'market'; playerId: string };
+  | { kind: 'market'; playerId: string }
+  | { kind: 'trade'; playerId: string };
 
 export default function App() {
   const { state, act, undo, redo, reset, canUndo, canRedo } = useGame();
@@ -98,6 +99,7 @@ function PlayerTile({ p, money, onOpen }: { p: RuntimePlayer; money: (n: number)
         <button className="b-in" onClick={() => onOpen('collect')}>Cobrar</button>
         <button className="b-out" onClick={() => onOpen('pay')}>Pagar</button>
         <button className="b-prop" onClick={() => onOpen('props')}>Propiedades</button>
+        <button className="b-trade" onClick={() => onOpen('trade')}>Negociar</button>
       </div>
     </article>
   );
@@ -142,6 +144,11 @@ function SheetContent({
 
   if (sheet.kind === 'market') {
     return <Market me={me} state={state} act={act} money={money} close={close} />;
+  }
+
+  if (sheet.kind === 'trade') {
+    const others = state.players.filter((p) => p.id !== me.id && !p.bankrupt);
+    return <TradePanel me={me} others={others} act={act} money={money} close={close} />;
   }
   return null;
 }
@@ -317,6 +324,93 @@ function Market({
         {available.length === 0 && <p className="hint">No quedan propiedades libres.</p>}
       </div>
       <button className="confirm" onClick={close}>Listo</button>
+    </div>
+  );
+}
+
+function TradePanel({
+  me, others, act, money, close,
+}: {
+  me: RuntimePlayer;
+  others: RuntimePlayer[];
+  act: ReturnType<typeof useGame>['act'];
+  money: (n: number) => string;
+  close: () => void;
+}) {
+  const [otherId, setOtherId] = useState<string>(others[0]?.id ?? '');
+  const [aCash, setACash] = useState('');
+  const [bCash, setBCash] = useState('');
+  const [aProps, setAProps] = useState<string[]>([]);
+  const [bProps, setBProps] = useState<string[]>([]);
+  const other = others.find((p) => p.id === otherId);
+
+  if (!other) return <div className="form"><h2>Negociar</h2><p className="hint">No hay otros jugadores.</p></div>;
+
+  const tradeable = (p: RuntimePlayer) => p.holdings.filter((h) => h.houses === 0);
+  const toggle = (list: string[], set: (v: string[]) => void, id: string) =>
+    set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+
+  const nA = parseInt(aCash, 10) || 0;
+  const nB = parseInt(bCash, 10) || 0;
+  const nothing = nA === 0 && nB === 0 && aProps.length === 0 && bProps.length === 0;
+  const valid = !nothing && me.cash >= nA && other.cash >= nB;
+
+  const column = (
+    p: RuntimePlayer,
+    cash: string,
+    setCash: (v: string) => void,
+    sel: string[],
+    setSel: (v: string[]) => void,
+  ) => (
+    <div className="tradecol">
+      <h3>{p.icon} {p.name}</h3>
+      <label className="tradecash">
+        Da dinero:
+        <input inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, ''))} placeholder="0" />
+      </label>
+      <p className="hint">Efectivo: {money(p.cash)}</p>
+      <div className="tradeprops">
+        {tradeable(p).length === 0 && <p className="hint">Sin propiedades negociables.</p>}
+        {tradeable(p).map((h) => {
+          const prop = getProperty(h.propertyId)!;
+          const on = sel.includes(h.propertyId);
+          return (
+            <div key={h.propertyId} className={on ? 'tradeprop tradeprop--on' : 'tradeprop'} onClick={() => toggle(sel, setSel, h.propertyId)}>
+              <PropertyCard property={prop} mortgaged={h.mortgaged} compact />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="form">
+      <h2>🤝 Negociación</h2>
+      {others.length > 1 && (
+        <div className="chips">
+          {others.map((o) => (
+            <button key={o.id} className={o.id === otherId ? 'chip chip--on' : 'chip'} onClick={() => { setOtherId(o.id); setBProps([]); }}>
+              {o.icon} {o.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="hint">Las propiedades con casas no aparecen. Las hipotecadas se transfieren tal cual (el nuevo dueño las deshipoteca después).</p>
+      <div className="tradegrid">
+        {column(me, aCash, setACash, aProps, setAProps)}
+        {column(other, bCash, setBCash, bProps, setBProps)}
+      </div>
+      <button
+        className="confirm"
+        disabled={!valid}
+        onClick={() => {
+          act({ type: 'TRADE', aId: me.id, bId: other.id, aCash: nA, bCash: nB, aProps, bProps });
+          close();
+        }}
+      >
+        {valid ? 'Confirmar intercambio' : nothing ? 'Selecciona algo para intercambiar' : 'Fondos insuficientes'}
+      </button>
     </div>
   );
 }
