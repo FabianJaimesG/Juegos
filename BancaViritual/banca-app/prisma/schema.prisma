@@ -1,0 +1,134 @@
+// Esquema de la base de datos de "Banca" (Monopoly virtual).
+// La conexión (DATABASE_URL) se define en prisma.config.ts, cargada desde .env.
+// Runtime del navegador NO usa Prisma: lee/escribe con supabase-js (REST/Realtime).
+// Prisma es solo la herramienta de esquema + migraciones sobre el Postgres de Supabase.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Catálogo de propiedades del tablero. No depende de una partida.
+/// Las extensiones del juego se distinguen con `expansion`.
+model Property {
+  id         String       @id @default(uuid())
+  boardIndex Int // posición en el tablero
+  name       String
+  type       PropertyKind @default(street)
+  colorGroup String? // grupo de color (para calles)
+  price      Int          @default(0)
+  /// Renta por nivel: [base, 1 casa, 2, 3, 4, hotel]. Longitud variable según tipo.
+  rent       Int[]        @default([])
+  houseCost  Int          @default(0)
+  mortgage   Int          @default(0)
+  expansion  String       @default("base")
+  ownerships Ownership[]
+
+  @@unique([expansion, boardIndex])
+  @@index([expansion])
+}
+
+enum PropertyKind {
+  street
+  railroad
+  utility
+  special // salida, cárcel, impuestos, suerte, etc.
+}
+
+/// Una partida (equivale a una "sala" en vivo). El estado se sincroniza por Realtime.
+model Game {
+  id             String        @id @default(uuid())
+  code           String        @unique // código corto de sala (4 chars)
+  currencySymbol String        @default("$")
+  status         GameStatus    @default(active)
+  turnIndex      Int           @default(0)
+  /// Ajustes: dados, dados especiales, sonido, voz, montos rápidos, etc.
+  settings       Json?
+  players        Player[]
+  ownerships     Ownership[]
+  transactions   Transaction[]
+  trades         Trade[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+enum GameStatus {
+  active
+  finished
+}
+
+model Player {
+  id         String  @id @default(uuid())
+  gameId     String
+  game       Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  name       String
+  icon       String  @default("🙂")
+  colorIndex Int     @default(0)
+  balance    Int     @default(1500)
+  bankrupt   Boolean @default(false)
+  seat       Int     @default(0) // orden de turno
+
+  ownerships    Ownership[]
+  from          Transaction[] @relation("from")
+  to            Transaction[] @relation("to")
+  tradesOffered Trade[]       @relation("offeredBy")
+  tradesTarget  Trade[]       @relation("offeredTo")
+
+  @@index([gameId])
+}
+
+/// Propiedad poseída por un jugador dentro de una partida.
+model Ownership {
+  id         String   @id @default(uuid())
+  gameId     String
+  game       Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  playerId   String
+  player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id])
+  houses     Int      @default(0) // 5 = hotel
+  mortgaged  Boolean  @default(false)
+
+  @@unique([gameId, propertyId])
+  @@index([gameId])
+  @@index([playerId])
+}
+
+/// Historial de movimientos de dinero (para historial y undo).
+model Transaction {
+  id           String   @id @default(uuid())
+  gameId       String
+  game         Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  kind         String // "bank_in" | "bank_out" | "transfer" | "rent" | "salida" | ...
+  amount       Int
+  fromPlayerId String?
+  fromPlayer   Player?  @relation("from", fields: [fromPlayerId], references: [id])
+  toPlayerId   String?
+  toPlayer     Player?  @relation("to", fields: [toPlayerId], references: [id])
+  text         String   @default("")
+  meta         Json?
+  createdAt    DateTime @default(now())
+
+  @@index([gameId])
+}
+
+/// Negocios entre jugadores (futuro).
+model Trade {
+  id          String   @id @default(uuid())
+  gameId      String
+  game        Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  offeredById String
+  offeredBy   Player   @relation("offeredBy", fields: [offeredById], references: [id])
+  offeredToId String
+  offeredTo   Player   @relation("offeredTo", fields: [offeredToId], references: [id])
+  /// Oferta libre: dinero y/o propiedades de cada lado.
+  offer       Json
+  status      String   @default("pending") // pending | accepted | rejected | cancelled
+  createdAt   DateTime @default(now())
+
+  @@index([gameId])
+}

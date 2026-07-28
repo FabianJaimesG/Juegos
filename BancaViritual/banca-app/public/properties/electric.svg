@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="440" viewBox="0 0 300 440" font-family="'Oswald',system-ui,sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f2a21"/><stop offset="1" stop-color="#0a1f18"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .nm{fill:#eef7f1;font-size:22px;font-weight:700}
+    .rl{fill:#a9c9ba;font-size:14px}
+    .rv{fill:#6fe3a6;font-size:15px;font-weight:600}
+    .ft{fill:#cfe6da;font-size:14px}
+    .gl{fill:#ffffff;font-size:12px;letter-spacing:1px;font-weight:700}
+    .em{font-size:52px}
+    .div{stroke:#14382b;stroke-width:1}
+  </style>
+  <rect x="0" y="0" width="300" height="440" rx="18" fill="url(#bg)" stroke="#1e4d3c"/>
+  <rect x="0" y="0" width="300" height="120" rx="18" fill="#6b7280"/>
+  <rect x="0" y="90" width="300" height="30" fill="#6b7280"/>
+  <text x="150" y="72" text-anchor="middle" class="em">💡</text>
+  <text x="150" y="108" text-anchor="middle" class="gl">SERVICIO</text>
+  <text x="150" y="158" text-anchor="middle" class="nm">Compañía de</text><text x="150" y="184" text-anchor="middle" class="nm">Electricidad</text>
+  <line x1="16" y1="188" x2="284" y2="188" class="div"/>
+  <text x="24" y="210" class="rl">Con un servicio</text><text x="276" y="210" class="rv" text-anchor="end">4</text><text x="24" y="236" class="rl">Con ambos</text><text x="276" y="236" class="rv" text-anchor="end">10</text>
+  <line x1="16" y1="388" x2="284" y2="388" class="div"/>
+  <text x="24" y="410" class="ft">💰 150</text><text x="119" y="410" class="ft">🏦 75</text>
+</svg>

@@ -1,0 +1,71 @@
+.banca-shell {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+  font-family: system-ui, sans-serif;
+  color: #e8f2ec;
+}
+
+.banca-shell h1 {
+  font-size: 2rem;
+  margin: 0 0 0.25rem;
+}
+
+.tag {
+  color: #8fb8a4;
+  margin: 0 0 1.5rem;
+}
+
+.card {
+  background: #12352a;
+  border: 1px solid #1e4d3c;
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.card ul {
+  margin: 0 0 0.75rem;
+  padding-left: 1.1rem;
+}
+
+.card code {
+  background: #0d271e;
+  padding: 0.1rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+.ok {
+  color: #6fe3a6;
+}
+
+.warn {
+  color: #e3c76f;
+}
+
+.note {
+  color: #8fb8a4;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.banca-shell button {
+  background: #1f7a52;
+  color: #fff;
+  border: 0;
+  border-radius: 10px;
+  padding: 0.7rem 1.1rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.banca-shell button:hover {
+  background: #248a5d;
+}

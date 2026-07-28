@@ -1,0 +1,112 @@
+.pcard {
+  --pc-color: #888;
+  position: relative;
+  width: 180px;
+  background: #0f2a21;
+  border: 1px solid #1e4d3c;
+  border-radius: 12px;
+  overflow: hidden;
+  color: #e8f2ec;
+  font-family: system-ui, sans-serif;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.pcard[role='button'] {
+  cursor: pointer;
+}
+.pcard[role='button']:hover {
+  transform: translateY(-2px);
+  transition: transform 0.12s;
+}
+
+.pcard__band {
+  background: var(--pc-color);
+  color: #fff;
+  padding: 0.5rem 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.pcard__emoji {
+  font-size: 1.6rem;
+}
+.pcard__group {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+.pcard__name {
+  margin: 0;
+  padding: 0.55rem 0.6rem 0.35rem;
+  font-size: 0.95rem;
+  line-height: 1.15;
+  min-height: 2.2em;
+}
+
+.pcard__rents {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+.pcard__rents td {
+  padding: 0.12rem 0.6rem;
+  border-top: 1px solid #14382b;
+}
+.pcard__rentval {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #6fe3a6;
+}
+
+.pcard__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.3rem;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.75rem;
+  background: #0b2018;
+  border-top: 1px solid #14382b;
+}
+
+.pcard__houses {
+  text-align: center;
+  padding: 0.25rem;
+  background: #14382b;
+  font-size: 0.85rem;
+}
+
+.pcard__badge {
+  position: absolute;
+  top: 42px;
+  right: -30px;
+  transform: rotate(35deg);
+  background: #b91c1c;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 2px 34px;
+}
+
+.pcard--mortgaged {
+  filter: grayscale(0.6) brightness(0.8);
+}
+
+.pcard__owner {
+  text-align: center;
+  font-size: 0.72rem;
+  padding: 0.25rem;
+  background: var(--pc-color);
+  color: #fff;
+}
+
+.pcard--compact {
+  width: 130px;
+}
+.pcard--compact .pcard__name {
+  font-size: 0.82rem;
+  min-height: auto;
+}

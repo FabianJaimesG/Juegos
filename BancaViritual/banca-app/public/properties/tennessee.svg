@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="440" viewBox="0 0 300 440" font-family="'Oswald',system-ui,sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f2a21"/><stop offset="1" stop-color="#0a1f18"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .nm{fill:#eef7f1;font-size:22px;font-weight:700}
+    .rl{fill:#a9c9ba;font-size:14px}
+    .rv{fill:#6fe3a6;font-size:15px;font-weight:600}
+    .ft{fill:#cfe6da;font-size:14px}
+    .gl{fill:#ffffff;font-size:12px;letter-spacing:1px;font-weight:700}
+    .em{font-size:52px}
+    .div{stroke:#14382b;stroke-width:1}
+  </style>
+  <rect x="0" y="0" width="300" height="440" rx="18" fill="url(#bg)" stroke="#1e4d3c"/>
+  <rect x="0" y="0" width="300" height="120" rx="18" fill="#f7941d"/>
+  <rect x="0" y="90" width="300" height="30" fill="#f7941d"/>
+  <text x="150" y="72" text-anchor="middle" class="em">🎸</text>
+  <text x="150" y="108" text-anchor="middle" class="gl">NARANJA · ORANGE</text>
+  <text x="150" y="158" text-anchor="middle" class="nm">Avenida</text><text x="150" y="184" text-anchor="middle" class="nm">Tennessee</text>
+  <line x1="16" y1="188" x2="284" y2="188" class="div"/>
+  <text x="24" y="210" class="rl">Renta base</text><text x="276" y="210" class="rv" text-anchor="end">14</text><text x="24" y="236" class="rl">Con 1 casa</text><text x="276" y="236" class="rv" text-anchor="end">70</text><text x="24" y="262" class="rl">Con 2 casas</text><text x="276" y="262" class="rv" text-anchor="end">200</text><text x="24" y="288" class="rl">Con 3 casas</text><text x="276" y="288" class="rv" text-anchor="end">550</text><text x="24" y="314" class="rl">Con 4 casas</text><text x="276" y="314" class="rv" text-anchor="end">750</text><text x="24" y="340" class="rl">Con hotel</text><text x="276" y="340" class="rv" text-anchor="end">950</text>
+  <line x1="16" y1="388" x2="284" y2="388" class="div"/>
+  <text x="24" y="410" class="ft">💰 180</text><text x="119" y="410" class="ft">🏠 100</text><text x="214" y="410" class="ft">🏦 90</text>
+</svg>
