@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { PropertyCard } from './components/PropertyCard';
 import { BOARD, getProperty } from './domain/board';
 import {
   bankBuildingsLeft,
+  createGame,
   playerBuildings,
   playerEquity,
   playerNetWorth,
@@ -11,6 +12,8 @@ import {
 } from './game/engine';
 import { canBuildOn } from './domain/wealth';
 import { useGame } from './game/useGame';
+import { useRealtimeSync } from './game/sync';
+import { hasSupabase } from './lib/supabase';
 
 const PLAYER_COLORS = ['#e11d48', '#2563eb', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#dc2626', '#4f46e5'];
 
@@ -31,13 +34,42 @@ export default function App() {
   const money = (n: number) => `${sym}${n.toLocaleString('es')}`;
   const player = (id: string) => state.players.find((p) => p.id === id);
 
+  // Sincronización en vivo (tabla Room + Realtime).
+  useRealtimeSync(state.code, state, (s) => act({ type: 'REPLACE', state: s }));
+
+  const join = (raw: string) => {
+    const c = raw.trim().toUpperCase();
+    if (c && c !== state.code) act({ type: 'REPLACE', state: createGame(c) });
+  };
+
+  // Auto-unirse desde ?room=CODE (solo al cargar).
+  useEffect(() => {
+    const r = new URLSearchParams(window.location.search).get('room');
+    if (r) join(r);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const shareLink = `${window.location.origin}${window.location.pathname}?room=${state.code}`;
+  const share = async () => {
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      alert('Enlace de invitación copiado:\n' + shareLink);
+    } catch {
+      prompt('Copia el enlace de invitación:', shareLink);
+    }
+  };
+
   return (
     <div className="app">
       <header className="topbar">
-        <h1>🏦 Banca <span className="code">Sala {state.code}</span></h1>
+        <h1>
+          🏦 Banca <span className="code">{hasSupabase ? '🟢' : '⚪'} Sala {state.code}</span>
+        </h1>
         <div className="topbar__actions">
           <button onClick={undo} disabled={!canUndo}>↶</button>
           <button onClick={redo} disabled={!canRedo}>↷</button>
+          <button onClick={share} title="Copiar enlace de invitación">Compartir</button>
+          <button onClick={() => { const c = prompt('Código de sala a la que unirse:'); if (c) join(c); }}>Unirse</button>
           <button onClick={() => { if (confirm('¿Nueva partida? Se borra la actual.')) reset(); }}>Nueva</button>
         </div>
       </header>

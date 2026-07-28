@@ -61,6 +61,15 @@ enum GameStatus {
   finished
 }
 
+/// Instantánea en vivo de una sala (para sincronización Realtime + recuperación
+/// de quien entra tarde). Guarda el estado completo del juego como JSON.
+model Room {
+  code      String   @id
+  state     Json
+  origin    String?
+  updatedAt DateTime @updatedAt
+}
+
 model Player {
   id         String  @id @default(uuid())
   gameId     String

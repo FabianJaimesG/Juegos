@@ -95,6 +95,10 @@ npm run gen:cards   # regenera las tarjetas SVG de public/properties/
 2. ✅ Migración aplicada (`prisma migrate`) y **28 propiedades sembradas** en Supabase.
 3. ✅ Dominio POO: clase `Property` + renta clásica, `wealth.ts` (patrimonio), `PropertyCard`, 28 SVG.
 4. ✅ Nombres/valores confirmados con las fotos del tablero (edición clásica en español).
-5. ⏳ Habilitar Realtime en las tablas de partida y sincronizar el estado.
-6. ⏳ Portar el banquero actual (jugadores, pagar/cobrar/transferir, dados, historial, voz, gráfico).
-7. ⏳ Funciones nuevas: comprar propiedad → hipoteca → casas → negociación → patrimonio en info.
+5. ✅ Engine + UI: banquero, pagar/transferir unificado, cobrar, comprar propiedad,
+   hipoteca, casas (even-build + límite del banco), **negociación**, patrimonio por jugador.
+6. ✅ **Sincronización en vivo**: tabla `Room` (JSON) + Supabase Realtime. Crear/unirse a sala,
+   enlace de invitación (`?room=`), recuperación de quien entra tarde. Habilitar con
+   `npx tsx scripts/enable-realtime.ts` (ya ejecutado).
+7. ⏳ Portar extras del banquero original: dados/turnos, sonido, voz, gráfico de patrimonio.
+8. ⏳ Desplegar en GitHub Pages / Vercel (build estático) y probar entre dispositivos reales.
