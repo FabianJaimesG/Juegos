@@ -1,0 +1,9 @@
+# Material fuente para autoría (PDF/cartillas) — no se publica
+preicfes/_fuente/
+
+# Archivos temporales de QA (galerías de revisión) — no se versionan
+preicfes/_qa-*.html
+
+# Sistema
+.DS_Store
+Thumbs.db

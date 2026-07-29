@@ -253,8 +253,9 @@ export default function App() {
           {state.settings.dice && <DiceView dice={state.dice} onRoll={() => act({ type: 'ROLL_DICE' })} canRoll={myTurn} />}
           <span className="turnbar__decks">
             {activeDecks(state.settings.cardPacks)
-              // Bonificación no se roba en el turno: se reparte al empezar, al
-              // girar la ruleta o al caer en la casilla, y va directo a la mano.
+              // Bonificación no se roba como los otros mazos: se reparte al
+              // empezar, al caer en la Parada Libre o con el botón ⭐ (Fortuna/
+              // Arca), y va directo a la mano.
               .filter((d) => d !== 'bonificacion')
               .map((d) => (
                 <button
@@ -268,6 +269,16 @@ export default function App() {
                   {DECKS[d].emoji} <small>{deckLeft(state, d)}</small>
                 </button>
               ))}
+            {state.settings.cardPacks.includes('parada-libre') && (
+              <button
+                className="deckbtn deckbtn--bonus"
+                disabled={!myTurn || !!state.drawnCard}
+                title="Caíste en Fortuna o Arca Comunal: toma una carta de Bonificación ⭐"
+                onClick={() => act({ type: 'TAKE_BONUS', playerId: turnPlayer.id })}
+              >
+                ⭐ <small>Fortuna/Arca</small>
+              </button>
+            )}
           </span>
           <span className="turnbar__btns">
             <button onClick={() => act({ type: 'NEXT_TURN' })} disabled={!myTurn} title={myTurn ? '' : 'Solo el jugador en turno puede pasar'}>

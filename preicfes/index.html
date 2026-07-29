@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Juegos de trivia · Elige modalidad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#100E24;
+  --surface:#1B1742;
+  --surface-2:#252059;
+  --line:rgba(255,255,255,.10);
+  --ink:#F3EFFF;
+  --ink-dim:#A79FD0;
+  --coin:#F5C542;
+  --saber:#3DE0AE;
+  --corona:#F5A524;
+  --display:'Bricolage Grotesque',system-ui,sans-serif;
+  --body:'Space Grotesk',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #2A2166 0%, transparent 60%),
+    var(--bg);
+  color:var(--ink);
+  font-family:var(--body);
+  min-height:100vh;
+  display:flex;align-items:center;justify-content:center;
+  padding:32px 16px;
+}
+.wrap{max-width:900px;width:100%;text-align:center}
+.kicker{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:10px}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(30px,6vw,52px);letter-spacing:-.03em;line-height:1;margin-bottom:12px}
+h1 span{color:var(--coin)}
+.lead{color:var(--ink-dim);font-size:15px;max-width:560px;margin:0 auto 34px;line-height:1.5}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.card{
+  display:flex;flex-direction:column;text-align:left;
+  background:var(--surface);border:1px solid var(--line);border-radius:20px;
+  padding:26px 24px;text-decoration:none;color:inherit;
+  transition:transform .15s ease,border-color .15s ease,background .15s ease;
+}
+.card:hover,.card:focus-visible{transform:translateY(-4px);border-color:var(--c);background:var(--surface-2);outline:none}
+.glyph{font-size:40px;line-height:1;margin-bottom:16px}
+.card h2{font-family:var(--display);font-weight:800;font-size:24px;letter-spacing:-.02em;margin-bottom:6px}
+.card .sub{color:var(--c);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px}
+.card p{color:var(--ink-dim);font-size:14px;line-height:1.5;margin-bottom:20px;flex:1}
+.play{
+  align-self:flex-start;display:inline-flex;align-items:center;gap:8px;
+  background:var(--c);color:#0D0A22;font-weight:700;font-size:15px;
+  border-radius:999px;padding:10px 20px;
+}
+.saber{--c:var(--saber)}
+.corona{--c:var(--corona)}
+.foot{margin-top:30px;color:var(--ink-dim);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Juegos de mesa · Trivia</p>
+  <h1>Elige tu partida<span>.</span></h1>
+  <p class="lead">Dos modalidades con el mismo tablero: rueda el dado, cae en una casilla, responde y reúne las seis fichas para ganar. Elige con cuál jugar.</p>
+
+  <div class="cards">
+    <a class="card saber" href="trivia-saber11.html">
+      <div class="glyph">🎓</div>
+      <div class="sub">Repaso ICFES</div>
+      <h2>Prueba Saber 11</h2>
+      <p>Preguntas tipo ICFES por materia: Lectura Crítica, Matemáticas, Sociales, Ciencias Naturales, Inglés y Razonamiento. Ideal para estudiar jugando.</p>
+      <span class="play">Jugar →</span>
+    </a>
+
+    <a class="card corona" href="trivia-corona.html">
+      <div class="glyph">👑</div>
+      <div class="sub">Trivia clásica</div>
+      <h2>Corona</h2>
+      <p>Trivia de cultura general por categorías: Ciencia, Arte, Historia, Geografía, Deportes y Entretenimiento. Para jugar en familia o con amigos.</p>
+      <span class="play">Jugar →</span>
+    </a>
+  </div>
+
+  <p class="foot">Se abre en el navegador, sin instalar nada. Funciona en celular, tablet o computador.</p>
+</div>
+</body>
+</html>

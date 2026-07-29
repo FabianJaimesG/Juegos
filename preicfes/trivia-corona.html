@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corona · Juego de trivia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#100E24;
+  --surface:#1B1742;
+  --surface-2:#252059;
+  --line:rgba(255,255,255,.10);
+  --ink:#F3EFFF;
+  --ink-dim:#A79FD0;
+  --coin:#F5C542;
+  --ciencia:#3DE0AE;
+  --arte:#FF6FB5;
+  --historia:#F5A524;
+  --geografia:#4CC9F0;
+  --deportes:#FF7A45;
+  --entretenimiento:#A78BFA;
+  --display:'Bricolage Grotesque',system-ui,sans-serif;
+  --body:'Space Grotesk',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #2A2166 0%, transparent 60%),
+    var(--bg);
+  color:var(--ink);
+  font-family:var(--body);
+  min-height:100vh;
+  padding:18px 14px 40px;
+}
+button{font-family:var(--body);cursor:pointer;border:none;background:none;color:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--coin);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto}
+
+/* ---------- header ---------- */
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(28px,5vw,44px);letter-spacing:-.03em;line-height:.95}
+h1 span{color:var(--coin)}
+.tagline{color:var(--ink-dim);font-size:13px;margin-top:4px}
+.turn-chip{
+  display:flex;align-items:center;gap:10px;background:var(--surface);
+  border:1px solid var(--line);border-radius:999px;padding:8px 16px 8px 8px;
+}
+.turn-chip .dot{width:26px;height:26px;border-radius:50%;flex:none;box-shadow:0 0 0 3px rgba(0,0,0,.25) inset}
+.turn-chip .who{font-weight:700;font-size:15px;line-height:1.1}
+.turn-chip .lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)}
+.snd{
+  width:42px;height:42px;border-radius:50%;background:var(--surface);border:1px solid var(--line);
+  font-size:17px;line-height:1
+}
+.snd:hover{border-color:var(--coin)}
+.snd.off{opacity:.45}
+
+/* ---------- layout ---------- */
+.layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,1fr);gap:18px;align-items:start}
+@media(max-width:880px){.layout{grid-template-columns:1fr}}
+
+/* ---------- board ---------- */
+.board{
+  background:linear-gradient(160deg,#221C52,#171238);
+  border:1px solid var(--line);border-radius:22px;padding:12px;
+  display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(5,1fr);
+  gap:5px;aspect-ratio:9/5.6;
+}
+.tile{
+  border-radius:9px;position:relative;display:flex;align-items:center;justify-content:center;
+  background:var(--c);border:1px solid rgba(255,255,255,.18);
+  transition:transform .18s ease, box-shadow .18s ease;
+}
+.tile .glyph{font-size:clamp(10px,1.7vw,17px);line-height:1;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.tile.crown{border:2px solid #fff;background:linear-gradient(140deg,#F5C542,#E09A12);box-shadow:0 0 0 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.35)}
+.tile.duel{background:linear-gradient(140deg,#4A2140,#301429);border-color:rgba(255,111,181,.55)}
+.tile.hot{transform:scale(1.14);box-shadow:0 0 0 3px var(--coin),0 8px 22px rgba(0,0,0,.5);z-index:4}
+.tokens{position:absolute;inset:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:2px;padding:2px}
+.token{
+  width:clamp(13px,2vw,19px);height:clamp(13px,2vw,19px);border-radius:50%;
+  border:2px solid rgba(0,0,0,.55);font-size:clamp(7px,1.1vw,10px);
+  display:flex;align-items:center;justify-content:center;line-height:1;
+  animation:pop .25s ease;
+}
+@keyframes pop{from{transform:scale(.4)}to{transform:scale(1)}}
+
+/* center of board */
+.center{
+  grid-column:2/9;grid-row:2/5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  background:radial-gradient(circle at 50% 40%, #2E2670, #1A1541);
+  border:1px solid var(--line);border-radius:16px;padding:10px;
+}
+.die{
+  width:clamp(54px,7vw,72px);height:clamp(54px,7vw,72px);border-radius:16px;background:#FFFDF5;
+  display:grid;grid-template:repeat(3,1fr)/repeat(3,1fr);padding:9px;gap:2px;
+  box-shadow:0 8px 0 #C8C0A8, 0 12px 24px rgba(0,0,0,.45);
+}
+.pip{width:100%;height:100%;border-radius:50%;background:#171238;opacity:0;justify-self:center;align-self:center}
+.pip.on{opacity:1}
+.die.roll{animation:shake .5s ease}
+@keyframes shake{
+  0%{transform:rotate(0) translateY(0)}25%{transform:rotate(-14deg) translateY(-8px)}
+  50%{transform:rotate(12deg) translateY(0)}75%{transform:rotate(-6deg) translateY(-4px)}100%{transform:rotate(0)}
+}
+.roll-btn{
+  background:var(--coin);color:#241B00;font-weight:700;font-size:14px;letter-spacing:.02em;
+  padding:10px 22px;border-radius:999px;box-shadow:0 4px 0 #B98F17;transition:transform .1s
+}
+.roll-btn:active{transform:translateY(3px);box-shadow:0 1px 0 #B98F17}
+.roll-btn:disabled{opacity:.4;box-shadow:none;cursor:not-allowed}
+.center-note{font-size:11px;color:var(--ink-dim);text-align:center;min-height:14px}
+
+/* ---------- sidebar ---------- */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px}
+.panel + .panel{margin-top:14px}
+.panel h2{font-family:var(--display);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:10px}
+.player{
+  display:flex;align-items:center;gap:11px;padding:9px;border-radius:12px;border:1px solid transparent;
+}
+.player.active{background:var(--surface-2);border-color:var(--line)}
+.crownwheel{
+  width:46px;height:46px;border-radius:50%;flex:none;position:relative;cursor:pointer;
+  box-shadow:0 0 0 2px rgba(0,0,0,.4) inset;
+}
+.crownwheel .ce{
+  position:absolute;inset:24%;border-radius:50%;background:var(--surface);
+  border:2px solid var(--pc);display:flex;align-items:center;justify-content:center;
+  font-size:14px;line-height:1;
+}
+.crownwheel:hover .ce{border-color:var(--coin)}
+.player.active .crownwheel .ce{background:var(--surface-2)}
+.emojis{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:5px}
+@media(max-width:420px){.emojis{grid-template-columns:repeat(6,1fr)}}
+.em{aspect-ratio:1;border:1px solid var(--line);border-radius:10px;font-size:19px;background:var(--bg);line-height:1}
+.em:hover{border-color:var(--ink-dim)}
+.em.sel{border-color:var(--coin);background:var(--surface-2);box-shadow:0 0 0 1px var(--coin)}
+.em.taken{opacity:.2;pointer-events:none}
+.p-meta{flex:1;min-width:0}
+.p-name{font-weight:700;font-size:15px;display:flex;align-items:center;gap:6px}
+.p-name .x{color:var(--ink-dim);font-size:15px;line-height:1;opacity:.5}
+.p-name .x:hover{opacity:1;color:var(--arte)}
+.p-sub{font-size:11px;color:var(--ink-dim);display:flex;gap:10px;margin-top:2px}
+.coins{color:var(--coin);font-weight:700}
+.ghost{
+  width:100%;margin-top:10px;border:1px dashed var(--line);border-radius:12px;padding:9px;
+  font-size:13px;color:var(--ink-dim)
+}
+.ghost:hover{color:var(--ink);border-color:var(--coin)}
+
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.leg{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-dim)}
+.leg i{width:11px;height:11px;border-radius:3px;flex:none}
+.smallbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.sbtn{border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:12px;color:var(--ink-dim)}
+.sbtn:hover{color:var(--ink);border-color:var(--ink-dim)}
+
+/* ---------- modal ---------- */
+.scrim{
+  position:fixed;inset:0;background:rgba(8,6,22,.82);backdrop-filter:blur(6px);
+  display:none;align-items:center;justify-content:center;padding:16px;z-index:50
+}
+.scrim.open{display:flex}
+.modal{
+  background:var(--surface);border:1px solid var(--line);border-radius:22px;width:min(560px,100%);
+  overflow:hidden;animation:rise .22s ease;max-height:92vh;overflow-y:auto
+}
+@keyframes rise{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
+.q-head{padding:14px 18px;background:var(--c);color:#0D0A22}
+.q-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.q-right{text-align:right;flex:none}
+.q-clock{font-family:var(--display);font-weight:800;font-size:26px;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.q-clock.low{animation:pulse .5s infinite}
+@keyframes pulse{50%{opacity:.35;transform:scale(1.12)}}
+.q-diff{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.65;margin-top:3px}
+.picks{display:grid;gap:8px;margin-top:12px}
+.pick{
+  display:flex;align-items:center;gap:11px;text-align:left;padding:13px 14px;border-radius:12px;
+  background:var(--surface-2);border:1px solid var(--line);font-size:15px;font-weight:500;transition:transform .1s
+}
+.pick:hover{border-color:var(--c);transform:translateX(3px)}
+.pick .pe{font-size:20px;line-height:1}
+.hot-streak{color:var(--coin)}
+.claim{
+  margin-top:7px;width:100%;background:var(--coin);color:#241B00;font-weight:700;font-size:12px;
+  padding:7px;border-radius:9px;animation:pulse 1.6s infinite
+}
+.ctrls{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
+.ctrls label{margin:0 0 4px}
+.ctrls select{padding:8px 9px;font-size:13px}
+.q-cat{font-family:var(--display);font-weight:800;font-size:20px;letter-spacing:-.02em;text-transform:capitalize}
+.q-badge{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.7}
+.timer{height:5px;background:rgba(0,0,0,.25)}
+.timer i{display:block;height:100%;background:#0D0A22;width:100%}
+.q-body{padding:18px}
+.q-text{font-family:var(--display);font-size:20px;font-weight:700;letter-spacing:-.02em;line-height:1.3;margin-bottom:16px}
+.opts{display:grid;gap:8px}
+.opt{
+  text-align:left;padding:13px 15px;border-radius:12px;background:var(--surface-2);
+  border:1px solid var(--line);font-size:15px;transition:transform .1s
+}
+.opt:hover:not(:disabled){border-color:var(--c);transform:translateX(3px)}
+.opt:disabled{cursor:default}
+.opt.gone{opacity:.18;text-decoration:line-through}
+.opt.right{background:#1D6B4F;border-color:#3DE0AE}
+.opt.wrong{background:#6B1D3A;border-color:#FF6FB5}
+.opt.hint{border-color:var(--coin);box-shadow:0 0 0 1px var(--coin)}
+.help{display:flex;gap:7px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.hbtn{
+  border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:11px;line-height:1.25;
+  display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;min-width:76px
+}
+.hbtn b{font-size:16px}
+.hbtn small{color:var(--coin);font-weight:700}
+.hbtn:hover:not(:disabled){border-color:var(--coin)}
+.hbtn:disabled{opacity:.3;cursor:not-allowed}
+.verdict{margin-top:14px;padding:12px 14px;border-radius:12px;background:var(--surface-2);font-size:14px;display:none}
+.verdict.show{display:block}
+.verdict b{font-family:var(--display)}
+
+/* forms */
+.form{padding:18px}
+.form h3{font-family:var(--display);font-size:22px;letter-spacing:-.02em;margin-bottom:14px}
+label{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin:10px 0 5px}
+input,select,textarea{
+  width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;
+  padding:11px 12px;color:var(--ink);font-family:var(--body);font-size:14px
+}
+.row{display:flex;gap:8px;align-items:center}
+.row input[type=radio]{width:auto;flex:none;accent-color:var(--coin)}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+.primary{background:var(--coin);color:#241B00;font-weight:700;padding:10px 18px;border-radius:999px}
+.secondary{border:1px solid var(--line);padding:10px 18px;border-radius:999px;color:var(--ink-dim)}
+.win{text-align:center;padding:34px 22px}
+.win .big{font-family:var(--display);font-size:38px;font-weight:800;letter-spacing:-.03em;margin:10px 0}
+.confetti{font-size:52px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <a href="index.html" style="display:inline-block;color:var(--ink-dim);text-decoration:none;font-size:13px;margin-bottom:6px">← Menú de juegos</a>
+      <h1>CORONA<span>.</span></h1>
+      <p class="tagline">Rueda el dado, cae en una casilla, responde y llévate el quesito. Seis coronas y ganas.</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="snd" id="sndBtn" title="Silenciar / activar sonido">🔊</button>
+      <div class="turn-chip">
+        <div class="dot" id="turnDot"></div>
+        <div>
+          <div class="lbl">Juega</div>
+          <div class="who" id="turnName">—</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div>
+      <div class="board" id="board"></div>
+    </div>
+
+    <aside>
+      <div class="panel">
+        <h2>Jugadores</h2>
+        <div id="players"></div>
+        <button class="ghost" id="addPlayerBtn">+ Agregar jugador</button>
+      </div>
+
+      <div class="panel">
+        <h2>Categorías</h2>
+        <div class="legend" id="legend"></div>
+        <div class="ctrls">
+          <div>
+            <label for="diff">Dificultad</label>
+            <select id="diff">
+              <option value="mix">Mezcladas</option>
+              <option value="1">Solo normales</option>
+              <option value="2">Solo difíciles</option>
+            </select>
+          </div>
+          <div>
+            <label for="limit">Tiempo</label>
+            <select id="limit">
+              <option value="20">20 s</option>
+              <option value="30" selected>30 s</option>
+              <option value="45">45 s</option>
+              <option value="60">60 s</option>
+              <option value="999">Sin límite</option>
+            </select>
+          </div>
+        </div>
+        <div class="smallbtns">
+          <button class="sbtn" id="addQBtn">+ Agregar pregunta</button>
+          <button class="sbtn" id="exportBtn">Descargar preguntas</button>
+          <button class="sbtn" id="importBtn">Cargar preguntas</button>
+          <button class="sbtn" id="resetBtn">Reiniciar partida</button>
+        </div>
+        <input type="file" id="fileIn" accept="application/json" hidden>
+        <p class="tagline" id="qcount" style="margin-top:10px"></p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- Pregunta -->
+<div class="scrim" id="qScrim">
+  <div class="modal" id="qModal">
+    <div class="q-head" id="qHead">
+      <div class="q-top">
+        <div>
+          <div class="q-badge" id="qBadge">Pregunta</div>
+          <div class="q-cat" id="qCat"></div>
+        </div>
+        <div class="q-right">
+          <div class="q-clock" id="timerNum">30s</div>
+          <div class="q-diff" id="qDiff"></div>
+        </div>
+      </div>
+    </div>
+    <div class="timer"><i id="timerBar"></i></div>
+    <div class="q-body">
+      <div class="q-text" id="qText"></div>
+      <div class="opts" id="qOpts"></div>
+      <div class="help" id="qHelp"></div>
+      <div class="verdict" id="qVerdict"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Agregar jugador -->
+<div class="scrim" id="pScrim">
+  <div class="modal">
+    <div class="form">
+      <h3 id="pTitle">Agregar jugador</h3>
+      <label for="pName">Nombre</label>
+      <input id="pName" maxlength="14" placeholder="Ej. Fabián">
+      <label>Ficha</label>
+      <div class="emojis" id="pEmojis"></div>
+      <div class="actions">
+        <button class="secondary" data-close>Cancelar</button>
+        <button class="primary" id="pSave">Agregar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Agregar pregunta -->
+<div class="scrim" id="nqScrim">
+  <div class="modal">
+    <div class="form">
+      <h3>Agregar pregunta</h3>
+      <label for="nqCat">Categoría</label>
+      <select id="nqCat"></select>
+      <label for="nqDiff">Dificultad</label>
+      <select id="nqDiff"><option value="1">Normal</option><option value="2">Difícil</option></select>
+      <label for="nqText">Pregunta</label>
+      <textarea id="nqText" rows="2" placeholder="¿Qué...?"></textarea>
+      <label>Respuestas — marca la correcta</label>
+      <div id="nqOpts"></div>
+      <div class="actions">
+        <button class="secondary" data-close>Cancelar</button>
+        <button class="primary" id="nqSave">Guardar pregunta</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Selector genérico -->
+<div class="scrim" id="cScrim">
+  <div class="modal">
+    <div class="form">
+      <h3 id="cTitle"></h3>
+      <p class="tagline" id="cSub"></p>
+      <div class="picks" id="cPicks"></div>
+      <div class="actions">
+        <button class="secondary" id="cCancel">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Ganador -->
+<div class="scrim" id="wScrim">
+  <div class="modal">
+    <div class="win">
+      <div class="confetti">👑</div>
+      <div class="big" id="wName"></div>
+      <p class="tagline">Seis coronas. Se acabó el juego.</p>
+      <div class="actions" style="justify-content:center">
+        <button class="primary" id="wAgain">Jugar otra vez</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ CATEGORÍAS ============ */
+const CATS = [
+  {id:'ciencia',        name:'Ciencia',         color:'#3DE0AE', glyph:'🔬'},
+  {id:'arte',           name:'Arte',            color:'#FF6FB5', glyph:'🎨'},
+  {id:'historia',       name:'Historia',        color:'#F5A524', glyph:'🏛️'},
+  {id:'geografia',      name:'Geografía',       color:'#4CC9F0', glyph:'🌎'},
+  {id:'deportes',       name:'Deportes',        color:'#FF7A45', glyph:'⚽'},
+  {id:'entretenimiento',name:'Entretenimiento', color:'#A78BFA', glyph:'🎬'}
+];
+const catById = id => CATS.find(c=>c.id===id);
+
+/* ============ PREGUNTAS (la primera opción es la correcta; se barajan al mostrarse) ============ */
+const QUESTIONS = {
+ciencia:[
+ {q:"¿Cuál es el planeta más grande del sistema solar?",a:["Júpiter","Saturno","Neptuno","La Tierra"]},
+ {q:"¿Qué gas absorben las plantas para hacer la fotosíntesis?",a:["Dióxido de carbono","Oxígeno","Nitrógeno","Hidrógeno"]},
+ {q:"¿Cuál es el símbolo químico del oro?",a:["Au","Ag","Or","Go"]},
+ {q:"¿Cuántos huesos tiene el cuerpo de un adulto?",a:["206","180","250","300"]},
+ {q:"¿Qué órgano produce la insulina?",a:["El páncreas","El hígado","El riñón","El bazo"]},
+ {q:"¿A qué velocidad viaja la luz, aproximadamente?",a:["300.000 km/s","300.000 km/h","30.000 km/s","3.000.000 km/s"]},
+ {q:"¿Quién formuló la teoría de la relatividad?",a:["Albert Einstein","Isaac Newton","Niels Bohr","Galileo Galilei"]},
+ {q:"¿Qué metal es líquido a temperatura ambiente?",a:["Mercurio","Plomo","Estaño","Zinc"]},
+ {q:"¿Cuál es el animal más grande del planeta?",a:["La ballena azul","El elefante africano","El cachalote","El tiburón ballena"]},
+ {q:"¿Cuál es el hueso más largo del cuerpo humano?",a:["El fémur","La tibia","El húmero","La columna"]},
+ {q:"¿Qué partícula del átomo tiene carga negativa?",a:["El electrón","El protón","El neutrón","El fotón"]},
+ {q:"¿Cuántos cromosomas tiene una célula humana normal?",a:["46","23","48","44"]},
+ {q:"¿Qué planeta se conoce como el planeta rojo?",a:["Marte","Venus","Mercurio","Júpiter"]},
+ {q:"¿Cuál es la fórmula química del agua?",a:["H₂O","CO₂","O₂","H₂O₂"]},
+ {q:"¿Qué científica descubrió el radio y el polonio?",a:["Marie Curie","Rosalind Franklin","Ada Lovelace","Jane Goodall"]},
+ {q:"¿Cuál es el elemento más abundante del universo?",a:["Hidrógeno","Oxígeno","Carbono","Helio"]},
+ {q:"¿Qué parte de la célula guarda el ADN?",a:["El núcleo","La membrana","El citoplasma","La mitocondria"]},
+ {q:"¿Qué escala se usa para medir la magnitud de los terremotos?",a:["Richter","Celsius","Beaufort","Kelvin"]},
+ {q:"¿Cuál es el grupo sanguíneo donante universal?",a:["O negativo","AB positivo","A positivo","B negativo"]},
+ {q:"¿Cuánto tarda la Tierra en dar una vuelta al Sol?",a:["365 días","30 días","24 horas","687 días"]},
+ {q:"¿Qué instrumento mide la presión atmosférica?",a:["El barómetro","El termómetro","El higrómetro","El anemómetro"]},
+ {q:"¿Quién descubrió la penicilina?",a:["Alexander Fleming","Louis Pasteur","Robert Koch","Edward Jenner"]},
+ {q:"¿Qué órgano bombea la sangre por todo el cuerpo?",a:["El corazón","Los pulmones","El hígado","El cerebro"]},
+ {q:"¿Cuál es el planeta más cercano al Sol?",a:["Mercurio","Venus","La Tierra","Marte"]},
+ {q:"¿De qué está hecha principalmente el agua de mar además de agua?",a:["Cloruro de sodio","Azúcar","Calcio","Yodo"]}
+],
+arte:[
+ {q:"¿Quién pintó La Mona Lisa?",a:["Leonardo da Vinci","Miguel Ángel","Rafael","Caravaggio"]},
+ {q:"¿En qué museo se exhibe La Mona Lisa?",a:["El Louvre","El Prado","El MoMA","La Galería Uffizi"]},
+ {q:"¿Quién pintó La noche estrellada?",a:["Vincent van Gogh","Claude Monet","Paul Cézanne","Edgar Degas"]},
+ {q:"¿Quién esculpió el David de mármol de Florencia?",a:["Miguel Ángel","Donatello","Bernini","Rodin"]},
+ {q:"¿Quién pintó el Guernica?",a:["Pablo Picasso","Joan Miró","Salvador Dalí","Diego Rivera"]},
+ {q:"¿A qué movimiento pertenecía Salvador Dalí?",a:["Surrealismo","Impresionismo","Cubismo","Barroco"]},
+ {q:"¿Quién pintó La persistencia de la memoria, el de los relojes derretidos?",a:["Salvador Dalí","René Magritte","Marc Chagall","Max Ernst"]},
+ {q:"¿Qué pintora mexicana es famosa por sus autorretratos?",a:["Frida Kahlo","Remedios Varo","Leonora Carrington","María Izquierdo"]},
+ {q:"¿Quién pintó el techo de la Capilla Sixtina?",a:["Miguel Ángel","Leonardo da Vinci","Botticelli","Tiziano"]},
+ {q:"¿Quién compuso la Novena Sinfonía?",a:["Beethoven","Mozart","Bach","Chopin"]},
+ {q:"¿Qué pintor se cortó parte de una oreja?",a:["Van Gogh","Gauguin","Toulouse-Lautrec","Manet"]},
+ {q:"¿Quién pintó Las meninas?",a:["Diego Velázquez","Francisco de Goya","El Greco","Murillo"]},
+ {q:"¿Quién escribió Cien años de soledad?",a:["Gabriel García Márquez","Mario Vargas Llosa","Julio Cortázar","Jorge Luis Borges"]},
+ {q:"¿Quién escribió Don Quijote de la Mancha?",a:["Miguel de Cervantes","Lope de Vega","Quevedo","Góngora"]},
+ {q:"¿Quién pintó El grito?",a:["Edvard Munch","Egon Schiele","Gustav Klimt","Kandinsky"]},
+ {q:"¿Quién diseñó la Sagrada Familia de Barcelona?",a:["Antoni Gaudí","Le Corbusier","Santiago Calatrava","Frank Gehry"]},
+ {q:"¿Quién compuso Las cuatro estaciones?",a:["Antonio Vivaldi","Handel","Haydn","Schubert"]},
+ {q:"¿En qué museo está el Guernica?",a:["Reina Sofía","El Prado","El Louvre","El Thyssen"]},
+ {q:"¿Quién pintó El nacimiento de Venus?",a:["Sandro Botticelli","Rafael","Tiziano","Giotto"]},
+ {q:"¿Quién escribió Romeo y Julieta?",a:["William Shakespeare","Christopher Marlowe","Molière","Dante"]},
+ {q:"¿Qué instrumento tocaba Louis Armstrong?",a:["La trompeta","El saxofón","El piano","El contrabajo"]},
+ {q:"¿Qué técnica usa pigmento sobre yeso fresco en un muro?",a:["El fresco","El óleo","La acuarela","El grabado"]},
+ {q:"¿Quién pintó los murales de la Escuela Nacional Preparatoria y es esposo de Frida Kahlo?",a:["Diego Rivera","David Alfaro Siqueiros","José Clemente Orozco","Rufino Tamayo"]},
+ {q:"¿Qué colores son los tres primarios de la pintura tradicional?",a:["Rojo, amarillo y azul","Rojo, verde y azul","Cian, magenta y amarillo","Blanco, negro y gris"]},
+ {q:"¿Quién pintó Los girasoles?",a:["Vincent van Gogh","Monet","Renoir","Matisse"]}
+],
+historia:[
+ {q:"¿En qué año llegó Cristóbal Colón a América?",a:["1492","1502","1452","1512"]},
+ {q:"¿En qué año cayó el Muro de Berlín?",a:["1989","1991","1979","1985"]},
+ {q:"¿Quién fue el primer ser humano en pisar la Luna?",a:["Neil Armstrong","Buzz Aldrin","Yuri Gagarin","Michael Collins"]},
+ {q:"¿Qué imperio construyó Machu Picchu?",a:["El imperio inca","El imperio azteca","El imperio maya","El imperio chimú"]},
+ {q:"¿En qué año empezó la Segunda Guerra Mundial?",a:["1939","1941","1936","1945"]},
+ {q:"¿Quién fue el primer presidente de Estados Unidos?",a:["George Washington","Thomas Jefferson","Abraham Lincoln","John Adams"]},
+ {q:"¿Qué civilización construyó las pirámides de Guiza?",a:["La egipcia","La mesopotámica","La persa","La griega"]},
+ {q:"¿Quién lideró la independencia de la India con la no violencia?",a:["Mahatma Gandhi","Nehru","Sukarno","Ho Chi Minh"]},
+ {q:"¿En qué año terminó la Primera Guerra Mundial?",a:["1918","1914","1920","1916"]},
+ {q:"¿A quién se le conoce como El Libertador de América?",a:["Simón Bolívar","José de San Martín","Francisco de Miranda","Antonio Nariño"]},
+ {q:"¿Qué transatlántico se hundió en 1912?",a:["El Titanic","El Lusitania","El Britannic","El Olympic"]},
+ {q:"¿Qué emperador francés fue derrotado en Waterloo?",a:["Napoleón Bonaparte","Luis XVI","Carlomagno","Luis XIV"]},
+ {q:"¿En qué año llegó el hombre a la Luna?",a:["1969","1961","1972","1959"]},
+ {q:"¿Qué revolución comenzó en 1789?",a:["La Revolución Francesa","La Revolución Rusa","La Revolución Industrial","La Revolución Mexicana"]},
+ {q:"¿Quién escribió el Manifiesto Comunista junto a Engels?",a:["Karl Marx","Lenin","Bakunin","Trotski"]},
+ {q:"¿Qué civilización tuvo a Tenochtitlán como capital?",a:["La mexica o azteca","La maya","La olmeca","La tolteca"]},
+ {q:"¿Sobre qué ciudad se lanzó la primera bomba atómica de la historia?",a:["Hiroshima","Nagasaki","Tokio","Osaka"]},
+ {q:"¿Qué reina de Egipto fue aliada de Julio César?",a:["Cleopatra","Nefertiti","Hatshepsut","Isis"]},
+ {q:"¿En qué año se disolvió la Unión Soviética?",a:["1991","1989","1993","1985"]},
+ {q:"¿Quién pasó 27 años preso y luego fue presidente de Sudáfrica?",a:["Nelson Mandela","Desmond Tutu","Steve Biko","Thabo Mbeki"]},
+ {q:"¿Qué imperio dominó el Mediterráneo con capital en Roma?",a:["El Imperio romano","El Imperio otomano","El Imperio bizantino","El Imperio persa"]},
+ {q:"¿Quién encabezó la conquista del imperio azteca?",a:["Hernán Cortés","Francisco Pizarro","Vasco Núñez de Balboa","Pedro de Alvarado"]},
+ {q:"¿Qué muro dividió Alemania durante la Guerra Fría?",a:["El Muro de Berlín","La Línea Maginot","El Telón de Acero","El Muro de Adriano"]},
+ {q:"¿Quién inventó la imprenta de tipos móviles en Europa?",a:["Johannes Gutenberg","Leonardo da Vinci","Galileo","Erasmo"]},
+ {q:"¿Qué faraón egipcio fue hallado con su máscara de oro en 1922?",a:["Tutankamón","Ramsés II","Keops","Akenatón"]}
+],
+geografia:[
+ {q:"¿Cuál es la capital de Australia?",a:["Camberra","Sídney","Melbourne","Brisbane"]},
+ {q:"¿Cuál es el río más caudaloso del mundo?",a:["El Amazonas","El Nilo","El Yangtsé","El Misisipi"]},
+ {q:"¿Cuál es el país más grande del mundo por superficie?",a:["Rusia","Canadá","China","Estados Unidos"]},
+ {q:"¿Cuál es el desierto cálido más grande del mundo?",a:["El Sahara","El Gobi","El Atacama","El Kalahari"]},
+ {q:"¿Cuál es la capital de Canadá?",a:["Ottawa","Toronto","Vancouver","Montreal"]},
+ {q:"¿Cuál es la montaña más alta del mundo?",a:["El Everest","El K2","El Aconcagua","El Kilimanjaro"]},
+ {q:"¿En qué continente está Egipto?",a:["África","Asia","Europa","Oceanía"]},
+ {q:"¿Cuál es la capital de Japón?",a:["Tokio","Kioto","Osaka","Seúl"]},
+ {q:"¿Cuál es el océano más grande?",a:["El Pacífico","El Atlántico","El Índico","El Ártico"]},
+ {q:"¿Qué país tiene forma de bota?",a:["Italia","Grecia","Portugal","Croacia"]},
+ {q:"¿Cuál es la capital de Brasil?",a:["Brasilia","Río de Janeiro","São Paulo","Salvador"]},
+ {q:"¿Cuál es el lago más grande del mundo?",a:["El mar Caspio","El lago Superior","El lago Victoria","El lago Baikal"]},
+ {q:"¿Qué cordillera recorre Sudamérica de norte a sur?",a:["Los Andes","Los Alpes","Los Apalaches","El Himalaya"]},
+ {q:"¿En qué país está Machu Picchu?",a:["Perú","Bolivia","Ecuador","Chile"]},
+ {q:"¿Cuál es la capital de Argentina?",a:["Buenos Aires","Córdoba","Rosario","Mendoza"]},
+ {q:"¿Cuál es el país más pequeño del mundo?",a:["El Vaticano","Mónaco","San Marino","Liechtenstein"]},
+ {q:"¿Qué canal une el Atlántico con el Pacífico?",a:["El canal de Panamá","El canal de Suez","El canal de la Mancha","El estrecho de Magallanes"]},
+ {q:"¿Cuál es la isla más grande del mundo?",a:["Groenlandia","Australia","Borneo","Madagascar"]},
+ {q:"¿Cuál es la capital de Colombia?",a:["Bogotá","Medellín","Cali","Cartagena"]},
+ {q:"¿Qué mar separa Europa de África?",a:["El Mediterráneo","El mar Negro","El mar Rojo","El mar Báltico"]},
+ {q:"¿Cuál es el país con más habitantes del mundo?",a:["India","China","Estados Unidos","Indonesia"]},
+ {q:"¿En qué país está la Torre Eiffel?",a:["Francia","Bélgica","Italia","Suiza"]},
+ {q:"¿Qué línea imaginaria divide la Tierra en dos hemisferios norte y sur?",a:["El ecuador","El meridiano de Greenwich","El trópico de Cáncer","El paralelo 38"]},
+ {q:"¿Cuál es la capital de Egipto?",a:["El Cairo","Alejandría","Luxor","Guiza"]},
+ {q:"¿Qué país está formado por más de 17.000 islas?",a:["Indonesia","Filipinas","Japón","Grecia"]}
+],
+deportes:[
+ {q:"¿Cada cuántos años se celebran los Juegos Olímpicos de verano?",a:["4 años","2 años","3 años","5 años"]},
+ {q:"¿Cuántos jugadores de cada equipo hay en la cancha en un partido de fútbol?",a:["11","10","12","9"]},
+ {q:"¿En qué deporte destacó Michael Jordan?",a:["Baloncesto","Béisbol","Fútbol americano","Tenis"]},
+ {q:"¿Qué selección ganó el Mundial de fútbol de 2022?",a:["Argentina","Francia","Brasil","Croacia"]},
+ {q:"¿Cuántos puntos vale un triple en baloncesto?",a:["3","2","1","4"]},
+ {q:"¿En qué deporte se golpea un volante o pluma?",a:["Bádminton","Tenis","Squash","Ping-pong"]},
+ {q:"¿Quién tiene más Balones de Oro en la historia?",a:["Lionel Messi","Cristiano Ronaldo","Michel Platini","Johan Cruyff"]},
+ {q:"¿Cuánto dura el tiempo reglamentario de un partido de fútbol?",a:["90 minutos","80 minutos","100 minutos","60 minutos"]},
+ {q:"¿En qué país nacieron los Juegos Olímpicos?",a:["Grecia","Italia","Egipto","Francia"]},
+ {q:"¿Cuántos anillos tiene la bandera olímpica?",a:["5","4","6","3"]},
+ {q:"¿Qué deporte practica Rafael Nadal?",a:["Tenis","Golf","Pádel","Ciclismo"]},
+ {q:"¿En qué deporte existe el home run?",a:["Béisbol","Críquet","Sóftbol callejero","Golf"]},
+ {q:"¿Cuántos jugadores por equipo hay en cancha en baloncesto?",a:["5","6","7","4"]},
+ {q:"¿Qué país ha ganado más Mundiales de fútbol?",a:["Brasil","Alemania","Italia","Argentina"]},
+ {q:"¿Qué torneo de tenis se juega sobre césped?",a:["Wimbledon","Roland Garros","US Open","Abierto de Australia"]},
+ {q:"¿En qué categoría compite Lewis Hamilton?",a:["Fórmula 1","MotoGP","Rally","NASCAR"]},
+ {q:"¿Cuánto mide un maratón oficial?",a:["42,195 km","21 km","50 km","35 km"]},
+ {q:"¿En qué deporte derribas todos los pinos de un solo tiro?",a:["Bolos","Petanca","Curling","Croquet"]},
+ {q:"¿Qué selección ganó la Eurocopa de 2024?",a:["España","Inglaterra","Francia","Alemania"]},
+ {q:"¿Cuántos sets hay que ganar en un Grand Slam masculino?",a:["3 de 5","2 de 3","4 de 7","1 de 1"]},
+ {q:"¿Qué deporte practicó Usain Bolt?",a:["Atletismo","Natación","Ciclismo","Boxeo"]},
+ {q:"¿Cuántos jugadores por equipo hay en cancha en voleibol?",a:["6","5","7","8"]},
+ {q:"¿Qué guante usa un boxeador para la mano de poder si es diestro?",a:["La derecha","La izquierda","Ninguna, se alterna","Las dos por igual"]},
+ {q:"¿Qué equipo es conocido como Los Merengues?",a:["Real Madrid","Barcelona","Milan","Boca Juniors"]},
+ {q:"¿En qué deporte se compite por el Tour de Francia?",a:["Ciclismo","Motociclismo","Atletismo","Triatlón"]}
+],
+entretenimiento:[
+ {q:"¿Quién dirigió la película Titanic?",a:["James Cameron","Steven Spielberg","Ridley Scott","Martin Scorsese"]},
+ {q:"¿De qué ciudad eran Los Beatles?",a:["Liverpool","Londres","Mánchester","Dublín"]},
+ {q:"¿Cómo se llama el mago protagonista de la saga de Hogwarts?",a:["Harry Potter","Ron Weasley","Neville Longbottom","Draco Malfoy"]},
+ {q:"¿De qué saga es la frase 'Yo soy tu padre'?",a:["Star Wars","Star Trek","El Señor de los Anillos","Matrix"]},
+ {q:"¿Quién interpretó a Jack en Titanic?",a:["Leonardo DiCaprio","Brad Pitt","Matt Damon","Johnny Depp"]},
+ {q:"¿En qué pueblo ficticio transcurre Stranger Things?",a:["Hawkins","Riverdale","Derry","Twin Peaks"]},
+ {q:"¿A quién se le llama el Rey del Pop?",a:["Michael Jackson","Elvis Presley","Prince","Freddie Mercury"]},
+ {q:"¿De qué país es el grupo BTS?",a:["Corea del Sur","Japón","China","Tailandia"]},
+ {q:"¿Cómo se llama el ratón más famoso de Disney?",a:["Mickey Mouse","Jerry","Speedy González","Stuart Little"]},
+ {q:"¿Qué película animada de Pixar trata sobre el Día de Muertos?",a:["Coco","Up","Soul","Intensamente"]},
+ {q:"¿De qué país es Bad Bunny?",a:["Puerto Rico","Colombia","República Dominicana","México"]},
+ {q:"¿Qué serie de HBO se basa en los libros de George R. R. Martin?",a:["Juego de Tronos","The Last of Us","Westworld","The Wire"]},
+ {q:"¿Quién interpretó a Iron Man en el cine?",a:["Robert Downey Jr.","Chris Evans","Chris Hemsworth","Mark Ruffalo"]},
+ {q:"¿Cómo se llama el reino de la película Frozen?",a:["Arendelle","Corona","Far Far Away","Zootopia"]},
+ {q:"¿Qué película coreana ganó el Óscar a Mejor Película?",a:["Parásitos","Old Boy","Minari","Decision to Leave"]},
+ {q:"¿Quién creó a Mickey Mouse?",a:["Walt Disney","Hanna y Barbera","Chuck Jones","Tex Avery"]},
+ {q:"¿A quién llaman la Reina del Pop?",a:["Madonna","Britney Spears","Beyoncé","Cher"]},
+ {q:"¿Cuál es el planeta natal de Superman?",a:["Krypton","Marte","Asgard","Tamaran"]},
+ {q:"¿Qué videojuego protagoniza un fontanero italiano?",a:["Super Mario","Sonic","Zelda","Mega Man"]},
+ {q:"¿De qué país es Shakira?",a:["Colombia","Argentina","Venezuela","Líbano"]},
+ {q:"¿Qué banda canta Bohemian Rhapsody?",a:["Queen","The Rolling Stones","Led Zeppelin","Pink Floyd"]},
+ {q:"¿Cómo se llama el oso amante de la miel creado por A. A. Milne?",a:["Winnie the Pooh","Baloo","Paddington","Yogui"]},
+ {q:"¿Qué actor interpreta a Jack Sparrow?",a:["Johnny Depp","Orlando Bloom","Javier Bardem","Geoffrey Rush"]},
+ {q:"¿En qué serie animada vive la familia de Springfield?",a:["Los Simpson","Padre de familia","Rick y Morty","South Park"]},
+ {q:"¿Qué cantante colombiano popularizó 'Hawái' y 'Colores'?",a:["Maluma","J Balvin","Sebastián Yatra","Camilo"]},
+
+ /* --- Disney --- */
+ {q:"Disney · ¿Cuál fue el primer largometraje animado de Disney?",a:["Blancanieves y los siete enanitos","Pinocho","Fantasía","Dumbo"]},
+ {q:"Disney · ¿Cómo se llama el hada de Peter Pan?",a:["Campanita","Aurora","Fauna","Primavera"]},
+ {q:"Disney · ¿Qué princesa pierde una zapatilla de cristal?",a:["Cenicienta","Aurora","Blancanieves","Bella"]},
+ {q:"Disney · ¿Cómo se llama el padre de Simba en El Rey León?",a:["Mufasa","Scar","Rafiki","Zazú"]},
+ {q:"Disney · ¿Quién es el villano de El Rey León?",a:["Scar","Shere Khan","Jafar","Hades"]},
+ {q:"Disney · ¿Cómo se llama la protagonista de La Sirenita?",a:["Ariel","Úrsula","Melody","Sebastián"]},
+ {q:"Disney · ¿Quién es la villana de La Sirenita?",a:["Úrsula","Maléfica","Cruella","Madre Gothel"]},
+ {q:"Disney · ¿Qué animal es Dumbo?",a:["Un elefante","Un ratón","Un burro","Un ciervo"]},
+ {q:"Disney · ¿En qué película aparece el Genio de la lámpara?",a:["Aladdín","Hércules","Simbad","Mulán"]},
+ {q:"Disney · ¿Cómo se llama el muñeco de nieve de Frozen?",a:["Olaf","Sven","Marshmallow","Kristoff"]},
+ {q:"Disney · ¿Cómo se llama la hermana de Elsa?",a:["Anna","Rapunzel","Merida","Vaiana"]},
+ {q:"Disney · ¿Qué vaquero protagoniza Toy Story?",a:["Woody","Buzz Lightyear","Jessie","Rex"]},
+ {q:"Disney · ¿Quién busca a su hijo perdido por todo el océano?",a:["Marlin","Nemo","Dory","Crush"]},
+ {q:"Disney · ¿En qué película una joven china se hace pasar por soldado?",a:["Mulán","Pocahontas","Vaiana","Encanto"]},
+ {q:"Disney · ¿Cómo se llama la novia de Mickey Mouse?",a:["Minnie","Daisy","Clarabella","Pluto"]},
+ {q:"Disney · ¿Qué perro es la mascota de Mickey Mouse?",a:["Pluto","Goofy","Bolt","Copito"]},
+ {q:"Disney · ¿Cómo se llama la protagonista de La Bella y la Bestia?",a:["Bella","Belinda","Aurora","Esmeralda"]},
+ {q:"Disney · ¿En qué película suena Hakuna Matata?",a:["El Rey León","Tarzán","El libro de la selva","Bambi"]},
+ {q:"Disney · ¿Qué niñera mágica llega volando con un paraguas?",a:["Mary Poppins","Campanita","Nana","Wendy"]},
+ {q:"Disney · ¿Qué villana quiere un abrigo con piel de cachorros dálmatas?",a:["Cruella de Vil","Maléfica","Úrsula","La Reina de Corazones"]},
+ {q:"Disney · ¿Cuántos dálmatas dice el título de la película?",a:["101","99","100","102"]},
+ {q:"Disney · ¿Qué jabalí y qué suricata acompañan a Simba?",a:["Pumba y Timón","Timón y Zazú","Rafiki y Pumba","Ed y Banzai"]},
+ {q:"Disney · ¿En qué película se canta 'Libre soy'?",a:["Frozen","Enredados","Vaiana","Encanto"]},
+ {q:"Disney · ¿Cómo se llama la villana de La Bella Durmiente?",a:["Maléfica","Cruella","Úrsula","Madre Gothel"]},
+ {q:"Disney · ¿Qué princesa cae en un sueño profundo por un hechizo?",a:["Aurora","Blancanieves","Cenicienta","Jazmín"]},
+ {q:"Disney · ¿En qué película aparece Stitch, el experimento 626?",a:["Lilo y Stitch","Chicken Little","Atlantis","Hermano Oso"]},
+ {q:"Disney · ¿Qué joven polinesia navega el océano para salvar su isla?",a:["Vaiana o Moana","Pocahontas","Kida","Mirabel"]},
+ {q:"Disney · ¿En qué familia colombiana todos tienen un don menos una?",a:["La familia Madrigal","La familia Miguel","La familia Rivera","La familia Parr"]},
+ {q:"Disney · ¿Qué pato es famoso por su mal genio?",a:["Donald","Daisy","Rico McPato","Goofy"]},
+ {q:"Disney · ¿Qué princesa tiene el pelo larguísimo y mágico?",a:["Rapunzel","Ariel","Mérida","Aurora"]},
+
+ /* --- Harry Potter (los libros) --- */
+ {q:"Harry Potter · ¿Cómo se llama la lechuza de Harry?",a:["Hedwig","Errol","Pigwidgeon","Fawkes"]},
+ {q:"Harry Potter · ¿Desde qué andén sale el expreso de Hogwarts?",a:["El 9¾","El 9½","El 10¾","El 7¼"]},
+ {q:"Harry Potter · ¿Qué posición juega Harry en el quidditch?",a:["Buscador","Guardián","Cazador","Golpeador"]},
+ {q:"Harry Potter · ¿Cuál es el nombre real de Lord Voldemort?",a:["Tom Sorvolo Ryddle","Salazar Slytherin","Corvus Lestrange","Marvolo Gaunt"]},
+ {q:"Harry Potter · ¿Qué criatura vive en la Cámara de los Secretos?",a:["Un basilisco","Un dragón","Una acromántula","Un hipogrifo"]},
+ {q:"Harry Potter · ¿Qué forma tiene el patronus de Harry?",a:["Un ciervo","Una cierva","Una nutria","Un perro"]},
+ {q:"Harry Potter · ¿Qué hechizo usa Harry para desarmar a sus rivales?",a:["Expelliarmus","Expecto Patronum","Lumos","Alohomora"]},
+ {q:"Harry Potter · ¿Cómo se llama el elfo doméstico de los Malfoy al que Harry libera?",a:["Dobby","Kreacher","Winky","Hokey"]},
+ {q:"Harry Potter · ¿Cuál fue el primer horrocrux que Harry destruyó?",a:["El diario de Tom Ryddle","El guardapelo de Slytherin","La copa de Hufflepuff","La diadema de Ravenclaw"]},
+ {q:"Harry Potter · ¿Cuáles son las tres Reliquias de la Muerte?",a:["La varita, la piedra y la capa","La copa, la espada y la piedra","El mapa, la capa y el giratiempo","La diadema, el guardapelo y el anillo"]},
+ {q:"Harry Potter · ¿Qué materia enseñaba Snape en los primeros libros?",a:["Pociones","Defensa Contra las Artes Oscuras","Transformaciones","Encantamientos"]},
+ {q:"Harry Potter · ¿Quiénes administran el banco Gringotts?",a:["Los duendes","Los elfos domésticos","Los centauros","Los goblins gigantes"]},
+ {q:"Harry Potter · ¿Qué frase abre el Mapa del Merodeador?",a:["Juro solemnemente que mis intenciones no son buenas","Travesura realizada","Abre el camino a los merodeadores","Hasta el final, siempre"]},
+ {q:"Harry Potter · ¿Qué criatura custodia la piedra filosofal en el tercer piso?",a:["Fluffy, un perro de tres cabezas","Un troll de montaña","Un basilisco","Un dragón noruego"]},
+ {q:"Harry Potter · ¿Qué animal representa a Hufflepuff?",a:["El tejón","El águila","El león","La serpiente"]},
+ {q:"Harry Potter · ¿Cómo se llaman los guardianes de Azkaban?",a:["Los dementores","Los inferi","Los mortífagos","Los aurores"]},
+ {q:"Harry Potter · ¿Qué torneo se celebra en el cuarto libro?",a:["El Torneo de los Tres Magos","La Copa Mundial de Quidditch","El Duelo de Campeones","El Torneo de las Casas"]},
+ {q:"Harry Potter · ¿Cómo se llama el periódico del mundo mágico?",a:["El Profeta","El Quisquilloso","La Gaceta de Hogwarts","El Vidente"]},
+ {q:"Harry Potter · ¿Cómo se llama la hermana menor de Ron?",a:["Ginny","Ginebra Ann","Molly","Fleur"]},
+ {q:"Harry Potter · ¿Qué mascota tiene Hermione?",a:["Crookshanks, un gato","Scabbers, una rata","Hedwig, una lechuza","Trevor, un sapo"]},
+ {q:"Harry Potter · ¿Quién resulta ser en realidad la rata de Ron?",a:["Peter Pettigrew","Sirius Black","Remus Lupin","Bartemius Crouch Jr."]},
+ {q:"Harry Potter · ¿Quién mata a Dumbledore en el sexto libro?",a:["Severus Snape","Draco Malfoy","Bellatrix Lestrange","Voldemort"]},
+ {q:"Harry Potter · ¿Qué muestra el espejo de Oesed?",a:["El deseo más profundo del corazón","El futuro","A los muertos de tu familia","Los recuerdos borrados"]},
+ {q:"Harry Potter · ¿Qué es un muggle?",a:["Una persona sin magia","Un mago sin varita","Un mago nacido de muggles","Un squib"]},
+ {q:"Harry Potter · ¿Qué materia enseña la profesora Sprout?",a:["Herbología","Adivinación","Pociones","Cuidado de Criaturas Mágicas"]},
+ {q:"Harry Potter · ¿De qué color son los ojos de Harry en los libros?",a:["Verdes, como los de su madre","Azules, como los de su padre","Castaños","Grises"]},
+ {q:"Harry Potter · ¿Cómo se llama la calle donde viven los Dursley?",a:["Privet Drive","Grimmauld Place","Diagon Alley","Spinner's End"]},
+ {q:"Harry Potter · ¿Qué maldición imperdonable causa la muerte?",a:["Avada Kedavra","Crucio","Imperio","Sectumsempra"]},
+ {q:"Harry Potter · ¿Cómo se llama el fénix de Dumbledore?",a:["Fawkes","Hedwig","Norberto","Buckbeak"]},
+ {q:"Harry Potter · ¿Cuál es el título del séptimo y último libro?",a:["Harry Potter y las Reliquias de la Muerte","Harry Potter y el misterio del príncipe","Harry Potter y la Orden del Fénix","Harry Potter y el legado maldito"]},
+ {q:"Harry Potter · ¿Quién escribió la saga de Harry Potter?",a:["J. K. Rowling","J. R. R. Tolkien","Rick Riordan","Philip Pullman"]},
+ {q:"Harry Potter · ¿Cómo se llama el hipogrifo que Hagrid presenta en clase?",a:["Buckbeak o Witherwings","Norberto","Aragog","Grawp"]},
+ {q:"Harry Potter · ¿Qué grupo secreto entrena Harry en el quinto libro?",a:["El Ejército de Dumbledore","La Orden del Fénix","La Brigada Inquisitorial","El Club de las Eminencias"]},
+ {q:"Harry Potter · ¿Cómo se llama la araña gigante amiga de Hagrid?",a:["Aragog","Mosag","Nagini","Fluffy"]}
+]
+};
+
+/* ============ PREGUNTAS DIFÍCILES (se marcan con d:2) ============ */
+const HARD={
+ciencia:[
+ {q:"¿Qué enzima usan los retrovirus para copiar su ARN en ADN?",a:["La transcriptasa inversa","La ADN polimerasa","La ligasa","La helicasa"]},
+ {q:"¿Cuál es el número atómico del carbono?",a:["6","12","8","14"]},
+ {q:"¿Qué principio dice que no se puede conocer a la vez la posición y el momento de una partícula?",a:["El principio de incertidumbre de Heisenberg","El principio de exclusión de Pauli","El principio de Arquímedes","El principio de superposición"]},
+ {q:"¿Qué orgánulo produce la mayor parte del ATP de la célula?",a:["La mitocondria","El ribosoma","El aparato de Golgi","El lisosoma"]},
+ {q:"¿Cuál es la unidad de la resistencia eléctrica?",a:["El ohmio","El voltio","El amperio","El vatio"]},
+ {q:"¿Qué tipo de enlace mantiene unidas las dos hebras del ADN?",a:["Puentes de hidrógeno","Enlaces covalentes","Enlaces iónicos","Enlaces peptídicos"]},
+ {q:"¿Cuál es el gas noble más abundante en la atmósfera terrestre?",a:["El argón","El helio","El neón","El kriptón"]},
+ {q:"¿A cuántos grados Celsius equivale el cero absoluto?",a:["-273,15 °C","-100 °C","0 °C","-459 °C"]},
+ {q:"¿Qué partícula se confirmó en el CERN en 2012?",a:["El bosón de Higgs","El neutrino","El quark top","El gravitón"]},
+ {q:"¿Cuál es el valor aproximado de la constante de Avogadro?",a:["6,022 × 10²³","3,14 × 10⁸","1,6 × 10⁻¹⁹","9,8 × 10²³"]},
+ {q:"¿Qué naturalista llegó a la teoría de la selección natural a la vez que Darwin?",a:["Alfred Russel Wallace","Jean-Baptiste Lamarck","Gregor Mendel","Thomas Huxley"]},
+ {q:"¿En qué capa de la atmósfera está la capa de ozono?",a:["La estratosfera","La troposfera","La mesosfera","La termosfera"]},
+ {q:"¿Qué ácido produce el estómago para digerir?",a:["Ácido clorhídrico","Ácido sulfúrico","Ácido acético","Ácido cítrico"]},
+ {q:"¿Cómo se llama el proceso que divide un núcleo pesado liberando energía?",a:["La fisión nuclear","La fusión nuclear","La ionización","La sublimación"]},
+ {q:"¿Cuántos pares de nervios craneales tiene el ser humano?",a:["12","10","8","31"]},
+ {q:"¿Qué hormona regula el ciclo del sueño?",a:["La melatonina","La adrenalina","La tiroxina","El cortisol"]}
+],
+arte:[
+ {q:"¿Qué técnica de contrastes extremos de luz popularizó Caravaggio?",a:["El tenebrismo","El puntillismo","El esfumado","El fresco seco"]},
+ {q:"¿Quién pintó El jardín de las delicias?",a:["El Bosco","Brueghel el Viejo","Durero","Van Eyck"]},
+ {q:"¿Quién escribió Rayuela?",a:["Julio Cortázar","Ernesto Sabato","Jorge Luis Borges","Roberto Bolaño"]},
+ {q:"¿En qué siglo pintó Velázquez Las meninas?",a:["El siglo XVII","El siglo XV","El siglo XVIII","El siglo XIX"]},
+ {q:"¿Qué arquitecto acuñó la frase 'menos es más'?",a:["Mies van der Rohe","Le Corbusier","Walter Gropius","Louis Sullivan"]},
+ {q:"¿Quién compuso la ópera La flauta mágica?",a:["Mozart","Verdi","Wagner","Rossini"]},
+ {q:"¿Quién fundó el cubismo junto a Picasso?",a:["Georges Braque","Juan Gris","Fernand Léger","Robert Delaunay"]},
+ {q:"¿Quién pintó La lección de anatomía del doctor Tulp?",a:["Rembrandt","Vermeer","Rubens","Frans Hals"]},
+ {q:"¿Qué museo de Nueva York con forma de espiral diseñó Frank Lloyd Wright?",a:["El Guggenheim","El MoMA","El Whitney","El Met"]},
+ {q:"¿Quién escribió La metamorfosis?",a:["Franz Kafka","Thomas Mann","Hermann Hesse","Robert Musil"]},
+ {q:"¿Qué autor argentino escribió Ficciones?",a:["Jorge Luis Borges","Julio Cortázar","Adolfo Bioy Casares","Leopoldo Lugones"]},
+ {q:"¿Qué cuadro dio nombre al impresionismo?",a:["Impresión, sol naciente","Los nenúfares","Almuerzo sobre la hierba","Bailarinas"]},
+ {q:"¿Qué escultor creó El pensador?",a:["Auguste Rodin","Camille Claudel","Alberto Giacometti","Antonio Canova"]},
+ {q:"¿Qué pintor holandés compuso cuadros de rectángulos rojos, azules y amarillos?",a:["Piet Mondrian","Theo van Doesburg","Kazimir Malévich","Wassily Kandinsky"]},
+ {q:"¿Quién compuso el Bolero?",a:["Maurice Ravel","Claude Debussy","Erik Satie","Camille Saint-Saëns"]},
+ {q:"¿Qué obra de Marcel Duchamp era un urinario firmado?",a:["La fuente","La rueda de bicicleta","El gran vidrio","Desnudo bajando una escalera"]},
+ {q:"¿En qué ciudad está el museo del Hermitage?",a:["San Petersburgo","Moscú","Viena","Praga"]}
+],
+historia:[
+ {q:"¿Qué tratado puso fin oficialmente a la Primera Guerra Mundial?",a:["El Tratado de Versalles","El Tratado de Utrecht","El Tratado de Tordesillas","El Pacto de Varsovia"]},
+ {q:"¿En qué año se firmó la Carta Magna inglesa?",a:["1215","1315","1115","1415"]},
+ {q:"¿Quién fue el último emperador azteca?",a:["Cuauhtémoc","Moctezuma II","Axayácatl","Ahuízotl"]},
+ {q:"¿En qué año cayó Constantinopla?",a:["1453","1492","1204","1521"]},
+ {q:"¿Qué dinastía china construyó la Ciudad Prohibida?",a:["La dinastía Ming","La dinastía Qing","La dinastía Han","La dinastía Tang"]},
+ {q:"¿Cómo se llamó la operación del desembarco de Normandía?",a:["Operación Overlord","Operación Barbarroja","Operación Market Garden","Operación Dinamo"]},
+ {q:"¿Quién fue el primer emperador romano?",a:["Augusto","Julio César","Nerón","Trajano"]},
+ {q:"¿En qué año ocurrió la Revolución rusa de octubre?",a:["1917","1905","1921","1914"]},
+ {q:"¿Qué guerra enfrentó a Atenas con Esparta?",a:["La guerra del Peloponeso","Las guerras médicas","La guerra de Troya","Las guerras púnicas"]},
+ {q:"¿Quién descifró los jeroglíficos gracias a la piedra de Rosetta?",a:["Jean-François Champollion","Howard Carter","Heinrich Schliemann","Thomas Young"]},
+ {q:"¿Qué batalla selló la independencia de Colombia en 1819?",a:["La batalla de Boyacá","La batalla de Carabobo","La batalla de Ayacucho","La batalla de Pichincha"]},
+ {q:"¿Cuánto duró en realidad la Guerra de los Cien Años?",a:["116 años","100 años exactos","87 años","132 años"]},
+ {q:"¿Quién conquistó el imperio inca?",a:["Francisco Pizarro","Hernán Cortés","Diego de Almagro","Pedro de Valdivia"]},
+ {q:"¿Qué canciller unificó Alemania en 1871?",a:["Otto von Bismarck","Guillermo II","Federico el Grande","Konrad Adenauer"]},
+ {q:"¿En qué año se fundó la ONU?",a:["1945","1919","1948","1950"]},
+ {q:"¿Qué emperador romano legalizó el cristianismo con el Edicto de Milán?",a:["Constantino","Teodosio","Diocleciano","Adriano"]},
+ {q:"¿Qué crisis de 1962 puso a EE. UU. y la URSS al borde de la guerra nuclear?",a:["La crisis de los misiles en Cuba","El bloqueo de Berlín","La guerra de Corea","La crisis de Suez"]},
+ {q:"¿Qué epidemia mató a un tercio de Europa en el siglo XIV?",a:["La peste negra","La viruela","El cólera","La gripe española"]}
+],
+geografia:[
+ {q:"¿Cuál es la capital de Kazajistán?",a:["Astaná","Almatý","Taskent","Biskek"]},
+ {q:"¿Qué río atraviesa Budapest?",a:["El Danubio","El Rin","El Elba","El Vístula"]},
+ {q:"¿Cuál es el punto más profundo del océano?",a:["La fosa de las Marianas","La fosa de Puerto Rico","La fosa de Java","La fosa de Atacama"]},
+ {q:"¿Qué país tiene tres capitales?",a:["Sudáfrica","Bolivia","Países Bajos","Chile"]},
+ {q:"¿Cuál es el país más alargado de norte a sur?",a:["Chile","Noruega","Vietnam","Japón"]},
+ {q:"¿Qué estrecho separa España de Marruecos?",a:["El estrecho de Gibraltar","El estrecho de Ormuz","El estrecho de Malaca","El Bósforo"]},
+ {q:"¿Cuál es la capital de Nueva Zelanda?",a:["Wellington","Auckland","Christchurch","Hamilton"]},
+ {q:"¿Cuál es el desierto más árido del planeta?",a:["El de Atacama","El Sahara","El Gobi","El Namib"]},
+ {q:"¿Qué mar interior de Asia Central casi ha desaparecido?",a:["El mar de Aral","El mar Caspio","El lago Baljash","El mar Negro"]},
+ {q:"¿Cuál es la capital de Marruecos?",a:["Rabat","Casablanca","Marrakech","Fez"]},
+ {q:"¿Qué cordillera marca el límite entre Europa y Asia?",a:["Los Urales","El Cáucaso","Los Cárpatos","Los Balcanes"]},
+ {q:"¿Cuál es el lago más profundo del mundo?",a:["El Baikal","El Tanganica","El mar Caspio","El Titicaca"]},
+ {q:"¿Qué país africano resistió la colonización europea?",a:["Etiopía","Ghana","Kenia","Senegal"]},
+ {q:"¿Cuál es la montaña más alta de América?",a:["El Aconcagua","El Denali","El Chimborazo","El Ojos del Salado"]},
+ {q:"¿En qué país está la ciudad excavada en roca de Petra?",a:["Jordania","Egipto","Siria","Israel"]},
+ {q:"¿Cuál es la sede del gobierno suizo?",a:["Berna","Zúrich","Ginebra","Basilea"]},
+ {q:"¿Qué volcán sepultó Pompeya?",a:["El Vesubio","El Etna","El Estrómboli","El Krakatoa"]}
+],
+deportes:[
+ {q:"¿Qué país ganó el primer Mundial de fútbol, en 1930?",a:["Uruguay","Argentina","Brasil","Italia"]},
+ {q:"¿Quién tiene el récord de Grand Slams individuales masculinos?",a:["Novak Djokovic","Rafael Nadal","Roger Federer","Pete Sampras"]},
+ {q:"¿En qué ciudad se celebraron los Juegos Olímpicos de 2016?",a:["Río de Janeiro","Londres","Tokio","Pekín"]},
+ {q:"¿Cuántos hoyos tiene un campo de golf reglamentario?",a:["18","9","21","12"]},
+ {q:"¿Quién es el máximo goleador histórico de la selección de Brasil?",a:["Neymar","Pelé","Ronaldo","Romário"]},
+ {q:"¿En qué deporte se entrega la Copa Stanley?",a:["Hockey sobre hielo","Baloncesto","Béisbol","Fútbol americano"]},
+ {q:"¿Cuántos minutos dura un cuarto en la NBA?",a:["12","10","15","20"]},
+ {q:"¿Cuál es el récord mundial de los 100 metros planos?",a:["9,58 s","9,72 s","9,45 s","10,01 s"]},
+ {q:"¿Qué club tiene más Copas de Europa o Champions League?",a:["Real Madrid","Milan","Bayern Múnich","Liverpool"]},
+ {q:"¿En qué deporte se usa el término 'eagle'?",a:["Golf","Tenis","Béisbol","Críquet"]},
+ {q:"¿Cuántos jugadores por equipo hay en cancha en rugby XV?",a:["15","13","11","7"]},
+ {q:"¿Qué ciclista ganó siete Tours de Francia que luego le fueron anulados?",a:["Lance Armstrong","Miguel Indurain","Jan Ullrich","Alberto Contador"]},
+ {q:"¿Qué país organizó el Mundial de fútbol de 2018?",a:["Rusia","Brasil","Catar","Sudáfrica"]},
+ {q:"¿Qué boxeador era apodado 'The Greatest'?",a:["Muhammad Ali","Mike Tyson","Joe Frazier","Sugar Ray Leonard"]},
+ {q:"¿Sobre qué superficie se juega Roland Garros?",a:["Arcilla o tierra batida","Césped","Cemento","Moqueta"]},
+ {q:"¿Cuánto se nada en un Ironman?",a:["3,86 km","1,5 km","5 km","10 km"]}
+],
+entretenimiento:[
+ {q:"¿Quién dirigió Pulp Fiction?",a:["Quentin Tarantino","Martin Scorsese","Robert Rodriguez","Paul Thomas Anderson"]},
+ {q:"¿Quién compuso la banda sonora de Star Wars?",a:["John Williams","Hans Zimmer","Ennio Morricone","Danny Elfman"]},
+ {q:"¿Cómo se llama el hotel de El resplandor?",a:["El Overlook","El Bates","El Continental","El Bellagio"]},
+ {q:"¿Qué película ganó el primer Óscar a Mejor Película?",a:["Alas","Lo que el viento se llevó","Ben-Hur","El cantor de jazz"]},
+ {q:"Harry Potter · ¿Cómo se llama el hermano de Dumbledore?",a:["Aberforth","Aberto","Elphias","Gellert"]},
+ {q:"Harry Potter · ¿Qué idioma hay que hablar para abrir la Cámara de los Secretos?",a:["El pársel","El gobbledegook","El rúnico antiguo","El sirénido"]},
+ {q:"Harry Potter · ¿Qué forma tiene el patronus de Snape?",a:["Una cierva","Un ciervo","Un lobo","Un fénix"]},
+ {q:"Harry Potter · ¿Qué núcleo tiene la varita de Harry?",a:["Una pluma de fénix","Un pelo de unicornio","Una fibra de dragón","Un pelo de veela"]},
+ {q:"Harry Potter · ¿Cuál es el apellido de soltera de la madre de Harry?",a:["Evans","Prewett","Black","Dursley"]},
+ {q:"Harry Potter · ¿Quién fue en realidad el guardián secreto de los Potter?",a:["Peter Pettigrew","Sirius Black","Remus Lupin","Albus Dumbledore"]},
+ {q:"Harry Potter · ¿Quién mata a la serpiente Nagini?",a:["Neville Longbottom","Ron Weasley","Harry Potter","Molly Weasley"]},
+ {q:"Harry Potter · ¿Qué profesor escondía a Voldemort en la nuca?",a:["Quirrell","Lockhart","Slughorn","Karkarov"]},
+ {q:"Harry Potter · ¿En qué dirección está la casa de los Black?",a:["Grimmauld Place número 12","Privet Drive número 4","Spinner's End","La Madriguera"]},
+ {q:"Harry Potter · ¿Qué materia enseña Remus Lupin?",a:["Defensa Contra las Artes Oscuras","Pociones","Transformaciones","Cuidado de Criaturas Mágicas"]},
+ {q:"Disney · ¿Cómo se llama la ballena de Pinocho?",a:["Monstruo","Moby","Bruce","Willy"]},
+ {q:"Disney · ¿En qué año se estrenó Blancanieves y los siete enanitos?",a:["1937","1928","1945","1950"]},
+ {q:"Disney · ¿Qué enanito de Blancanieves no habla?",a:["Mudito","Gruñón","Tímido","Dormilón"]},
+ {q:"Disney · ¿Cómo se llama la villana de Enredados?",a:["Madre Gothel","Maléfica","Yzma","La Reina Grimhilde"]},
+ {q:"Disney · ¿Cuál fue el primer largometraje de Pixar?",a:["Toy Story","Bichos","Monsters, Inc.","Cars"]},
+ {q:"Disney · ¿Cómo se llaman los dos ratones amigos de Cenicienta?",a:["Jaq y Gus","Bernardo y Bianca","Timothy y Dumbo","Basil y Dawson"]}
+]
+};
+for(const k in HARD){ HARD[k].forEach(q=>{ q.d=2; QUESTIONS[k].push(q); }); }
+
+/* ============ TABLERO ============ */
+/* 24 casillas en el perímetro de una grilla 9x5, en sentido horario. */
+function perimeter(){
+  const cells=[];
+  for(let c=1;c<=9;c++) cells.push([1,c]);
+  for(let r=2;r<=5;r++) cells.push([r,9]);
+  for(let c=8;c>=1;c--) cells.push([5,c]);
+  for(let r=4;r>=2;r--) cells.push([r,1]);
+  return cells;
+}
+const CELLS = perimeter();
+const DUELS = [2,10,18];
+let normalCount=0;
+const TILES = CELLS.map((cell,i)=>{
+  if(i%4===0) return {cell,type:'corona',cat:null};
+  if(DUELS.includes(i)) return {cell,type:'duelo',cat:null};
+  return {cell,type:'normal',cat:CATS[(normalCount++)%6].id};
+});
+
+/* ============ SONIDO (sintetizado, sin archivos) ============ */
+const SND={ctx:null, on:true};
+function ac(){
+  if(!SND.ctx) SND.ctx=new (window.AudioContext||window.webkitAudioContext)();
+  if(SND.ctx.state==='suspended') SND.ctx.resume();
+  return SND.ctx;
+}
+function tone(freq,at,dur,{type='sine',vol=.18,to=null}={}){
+  if(!SND.on) return;
+  const c=ac(), t=c.currentTime+at;
+  const o=c.createOscillator(), g=c.createGain();
+  o.type=type; o.frequency.setValueAtTime(freq,t);
+  if(to) o.frequency.exponentialRampToValueAtTime(to,t+dur);
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(vol,t+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g).connect(c.destination);
+  o.start(t); o.stop(t+dur+0.02);
+}
+function noise(at,dur,vol=.13){
+  if(!SND.on) return;
+  const c=ac(), t=c.currentTime+at, n=c.sampleRate*dur;
+  const buf=c.createBuffer(1,n,c.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+  const s=c.createBufferSource(); s.buffer=buf;
+  const f=c.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1800;
+  const g=c.createGain(); g.gain.value=vol;
+  s.connect(f).connect(g).connect(c.destination); s.start(t);
+}
+const SFX={
+  step(i){ tone(520+i*45,0,.09,{type:'square',vol:.08}); },
+  dice(){ for(let i=0;i<5;i++) noise(i*0.075,.05,.1); },
+  coin(){ tone(988,0,.08,{type:'square',vol:.14}); tone(1319,.08,.42,{type:'square',vol:.14}); },
+  right(){ [523,659,784,1047].forEach((f,i)=>tone(f,i*.075,.28,{type:'triangle',vol:.16})); },
+  wrong(){ tone(196,0,.5,{type:'sawtooth',vol:.14,to:82}); tone(98,.05,.42,{type:'square',vol:.08}); },
+  crown(){ [392,523,659,784,1047].forEach((f,i)=>tone(f,i*.09,.5,{type:'triangle',vol:.17}));
+           [1568,2093].forEach((f,i)=>tone(f,.5+i*.1,.4,{type:'sine',vol:.1})); },
+  help(){ tone(300,0,.16,{type:'sine',vol:.13,to:900}); },
+  tick(){ tone(1400,0,.045,{type:'square',vol:.05}); },
+  win(){ [523,659,784,1047,784,1047,1319].forEach((f,i)=>tone(f,i*.13,.5,{type:'triangle',vol:.18}));
+         [130,196].forEach((f,i)=>tone(f,i*.4,.7,{type:'sine',vol:.1})); }
+};
+const sndBtn=document.getElementById('sndBtn');
+sndBtn.onclick=()=>{
+  SND.on=!SND.on;
+  sndBtn.textContent=SND.on?'🔊':'🔇';
+  sndBtn.classList.toggle('off',!SND.on);
+  if(SND.on) SFX.help();
+};
+
+/* ============ ESTADO ============ */
+const COLORS=['#4CC9F0','#FF7A45','#3DE0AE','#FF6FB5','#A78BFA','#F5C542'];
+const EMOJIS=['🦊','🐼','🐯','🦁','🐸','🐵','🦄','🐙','🐝','🦖','🐺','🐨','🐧','🦉','🐲','🦋','👻','🤖','👽','🎩','💎','🚀','⚡','🍕'];
+let state, tokenAnim=false, editing=null;
+const STREAK_GOAL=10;
+let LIMIT=30;
+
+function newPlayer(name,i){
+  const used=(state&&state.players?state.players.map(p=>p.emoji):[]);
+  return {id:crypto.randomUUID?crypto.randomUUID():String(Math.random()),
+    name, emoji: EMOJIS.find(e=>!used.includes(e))||EMOJIS[i%EMOJIS.length],
+    color:COLORS[i%COLORS.length], pos:0, coins:80, wedges:[], streak:0};
+}
+function reset(defs){
+  const list = defs || [{name:'Danny'},{name:'Fabián'}];
+  state={players:[], turn:0, extraRoll:false};
+  list.forEach((d,i)=>{
+    const p=newPlayer(d.name,i);
+    if(d.emoji) p.emoji=d.emoji;
+    if(d.streak) p.streak=d.streak;
+    state.players.push(p);
+  });
+  renderAll();
+}
+const rosterOf=()=>state.players.map(p=>({name:p.name,emoji:p.emoji,streak:p.streak}));
+
+/* ============ RENDER ============ */
+const $ = s=>document.querySelector(s);
+const board=$('#board');
+
+function renderBoard(){
+  board.innerHTML='';
+  TILES.forEach((t,i)=>{
+    const el=document.createElement('div');
+    el.className='tile'+(t.type==='duelo'?' duel':'')+(t.type==='corona'?' crown':'');
+    el.style.gridRow=t.cell[0]; el.style.gridColumn=t.cell[1];
+    el.style.setProperty('--c', t.cat? catById(t.cat).color : 'transparent');
+    el.dataset.i=i;
+    el.title = t.type==='duelo' ? 'Duelo' : (t.type==='corona' ? 'Corona: eliges categoría' : catById(t.cat).name);
+    const g=document.createElement('div'); g.className='glyph';
+    g.textContent = t.type==='duelo' ? '⚔️' : (t.type==='corona' ? '👑' : catById(t.cat).glyph);
+    el.appendChild(g);
+    const tk=document.createElement('div'); tk.className='tokens'; el.appendChild(tk);
+    board.appendChild(el);
+  });
+  const c=document.createElement('div'); c.className='center';
+  c.innerHTML=`<div class="die" id="die"></div>
+    <button class="roll-btn" id="rollBtn">Lanzar dado</button>
+    <div class="center-note" id="note"></div>`;
+  board.appendChild(c);
+  drawDie(1);
+  $('#rollBtn').addEventListener('click', roll);
+}
+const PIPS={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+function drawDie(n){
+  const d=$('#die'); d.innerHTML='';
+  for(let i=0;i<9;i++){
+    const p=document.createElement('div');
+    p.className='pip'+(PIPS[n].includes(i)?' on':'');
+    d.appendChild(p);
+  }
+}
+function renderTokens(){
+  document.querySelectorAll('.tokens').forEach(t=>t.innerHTML='');
+  state.players.forEach(p=>{
+    const tile=board.querySelector(`.tile[data-i="${p.pos}"] .tokens`);
+    if(!tile) return;
+    const el=document.createElement('div');
+    el.className='token'; el.style.background=p.color; el.textContent=p.emoji;
+    el.title=p.name;
+    tile.appendChild(el);
+  });
+}
+function wheelGradient(p){
+  const stops=CATS.map((c,i)=>{
+    const col = p.wedges.includes(c.id) ? c.color : 'rgba(255,255,255,.09)';
+    return `${col} ${i*60}deg ${(i+1)*60}deg`;
+  }).join(',');
+  return `conic-gradient(${stops})`;
+}
+function renderPlayers(){
+  const box=$('#players'); box.innerHTML='';
+  state.players.forEach((p,i)=>{
+    const el=document.createElement('div');
+    el.className='player'+(i===state.turn?' active':'');
+    const listo = p.streak>=STREAK_GOAL && p.wedges.length<6;
+    el.innerHTML=`
+      <div class="crownwheel" style="background:${wheelGradient(p)};--pc:${p.color}" data-edit="${p.id}" title="Cambiar nombre o ficha"><span class="ce">${p.emoji}</span></div>
+      <div class="p-meta">
+        <div class="p-name">${escapeHtml(p.name)} ${state.players.length>1?`<button class="x" data-del="${p.id}" title="Quitar jugador">×</button>`:''}</div>
+        <div class="p-sub"><span class="coins">🪙 ${p.coins}</span><span>👑 ${p.wedges.length}/6</span><span class="${p.streak?'hot-streak':''}">🔥 ${p.streak}/${STREAK_GOAL}</span></div>
+        ${listo?`<button class="claim" data-claim="${p.id}">👑 Cobrar corona gratis</button>`:''}
+      </div>`;
+    box.appendChild(el);
+  });
+  box.querySelectorAll('[data-claim]').forEach(b=>b.onclick=()=>claimStreak(state.players.find(p=>p.id===b.dataset.claim)));
+  box.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openPlayerModal(b.dataset.edit));
+  box.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+    const idx=state.players.findIndex(p=>p.id===b.dataset.del);
+    state.players.splice(idx,1);
+    if(state.turn>=state.players.length) state.turn=0;
+    renderAll();
+  });
+  const cur=state.players[state.turn];
+  $('#turnName').textContent=cur.name;
+  $('#turnDot').style.background=cur.color;
+}
+function renderLegend(){
+  $('#legend').innerHTML=CATS.map(c=>`<div class="leg"><i style="background:${c.color}"></i>${c.name}</div>`).join('');
+  const n=Object.values(QUESTIONS).reduce((a,b)=>a+b.length,0);
+  $('#qcount').textContent=`${n} preguntas cargadas.`;
+}
+function renderAll(){renderBoard();renderTokens();renderPlayers();renderLegend();}
+function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ============ TURNO ============ */
+const cur=()=>state.players[state.turn];
+async function roll(){
+  if(tokenAnim) return;
+  tokenAnim=true;
+  $('#rollBtn').disabled=true; $('#note').textContent='';
+  const die=$('#die'); die.classList.add('roll');
+  SFX.dice();
+  for(let i=0;i<8;i++){drawDie(1+Math.floor(Math.random()*6)); await sleep(55);}
+  const n=1+Math.floor(Math.random()*6);
+  drawDie(n); die.classList.remove('roll');
+  await sleep(180);
+  const p=cur();
+  for(let s=0;s<n;s++){
+    p.pos=(p.pos+1)%TILES.length;
+    SFX.step(s);
+    renderTokens(); await sleep(150);
+  }
+  const tile=board.querySelector(`.tile[data-i="${p.pos}"]`);
+  tile.classList.add('hot'); await sleep(320); tile.classList.remove('hot');
+  tokenAnim=false;
+  land(TILES[p.pos]);
+}
+function land(tile){
+  if(tile.type==='duelo') return startDuel();
+  if(tile.type==='corona') return crownTile();
+  askQuestion(tile.cat,{player:cur(),onDone:endTurn});
+}
+function endTurn(ok){
+  const p=cur();
+  if(p.wedges.length===6) return win(p);
+  state.extraRoll=!!ok;
+  nextTurn(0);
+}
+function nextTurn(delay=0){
+  setTimeout(()=>{
+    if(state.extraRoll){ state.extraRoll=false; }
+    else { state.turn=(state.turn+1)%state.players.length; }
+    renderPlayers(); $('#rollBtn').disabled=false;
+  },delay);
+}
+
+/* ============ CORONA ============ */
+function grantWedge(p,cat){
+  if(!p.wedges.includes(cat)) p.wedges.push(cat);
+  renderPlayers();
+}
+function crownTile(){
+  const p=cur();
+  const falta=CATS.filter(c=>!p.wedges.includes(c.id));
+  picker({
+    title:`👑 Casilla de corona`,
+    sub:`${p.name} ${p.emoji}, elige la corona que quieres pelear.`,
+    items:falta.map(c=>({label:c.name, emoji:c.glyph, color:c.color, value:c.id})),
+    onPick:cat=>askQuestion(cat,{player:p,crown:true,onDone:ok=>{
+      if(ok){ grantWedge(p,cat); }
+      endTurn(ok);
+    }})
+  });
+}
+function claimStreak(p){
+  const falta=CATS.filter(c=>!p.wedges.includes(c.id));
+  picker({
+    title:`🔥 Racha de ${p.streak}`,
+    sub:`${p.name} ${p.emoji} se lleva una corona sin preguntar. Elige cuál. La racha vuelve a cero.`,
+    items:falta.map(c=>({label:c.name, emoji:c.glyph, color:c.color, value:c.id})),
+    cancel:true,
+    onPick:cat=>{
+      p.streak=0; grantWedge(p,cat); SFX.crown();
+      $('#note').textContent=`${p.name} cobró su racha: corona de ${catById(cat).name}`;
+      if(p.wedges.length===6) win(p);
+    }
+  });
+}
+
+/* ============ DUELO ============ */
+function startDuel(){
+  const p=cur();
+  const rivales=state.players.filter(x=>x.id!==p.id && x.wedges.length>0);
+  if(!rivales.length){
+    p.coins+=15; renderPlayers(); SFX.coin();
+    $('#note').textContent='Nadie tiene coronas que robar. Te llevas 🪙 15 de consuelo.';
+    return nextTurn(700);
+  }
+  picker({
+    title:'⚔️ Casilla de duelo',
+    sub:`${p.name} ${p.emoji}, ¿a quién retas?`,
+    items:rivales.map(r=>({label:`${r.name} · ${r.wedges.length} 👑`, emoji:r.emoji, color:r.color, value:r.id})),
+    cancel:true, onCancel:()=>nextTurn(0),
+    onPick:id=>pickWedge(p, state.players.find(x=>x.id===id))
+  });
+}
+function pickWedge(atk,def){
+  picker({
+    title:`⚔️ ${atk.name} reta a ${def.name}`,
+    sub:'Elige la corona que quieres robarle.',
+    items:def.wedges.map(id=>{const c=catById(id); return {label:c.name, emoji:c.glyph, color:c.color, value:id};}),
+    cancel:true, onCancel:()=>nextTurn(0),
+    onPick:cat=>duelAttack(atk,def,cat)
+  });
+}
+function duelAttack(atk,def,cat){
+  askQuestion(cat,{
+    player:atk, badge:`⚔️ Ataca ${atk.name} ${atk.emoji} · en juego: corona de ${catById(cat).name}`,
+    onDone:ok=>{
+      if(!ok){
+        $('#note').textContent=`${atk.name} falló el duelo. La corona se queda con ${def.name}.`;
+        return nextTurn(0);
+      }
+      picker({
+        title:'⚔️ Turno de defender',
+        sub:`${atk.name} acertó. Pásale el dispositivo a ${def.name} ${def.emoji}: si falla, pierde su corona de ${catById(cat).name}.`,
+        items:[{label:`Defender, ${def.name}`, emoji:def.emoji, color:def.color, value:'go'}],
+        onPick:()=>duelDefend(atk,def,cat)
+      });
+    }
+  });
+}
+function duelDefend(atk,def,cat){
+  askQuestion(cat,{
+    player:def, badge:`🛡️ Defiende ${def.name} ${def.emoji} · corona de ${catById(cat).name}`,
+    onDone:ok=>{
+      if(ok){
+        $('#note').textContent=`${def.name} defendió su corona de ${catById(cat).name}.`;
+        return nextTurn(0);
+      }
+      def.wedges=def.wedges.filter(c=>c!==cat);
+      atk.wedges.push(cat); atk.coins+=30;
+      renderPlayers(); SFX.crown();
+      $('#note').textContent=`${atk.name} le robó la corona de ${catById(cat).name} a ${def.name}. +🪙 30`;
+      if(atk.wedges.length===6) return win(atk);
+      nextTurn(0);
+    }
+  });
+}
+
+/* ============ PREGUNTAS ============ */
+let Q={};
+const asked=new Set();
+function pick(cat){
+  const want=$('#diff').value;
+  let pool=QUESTIONS[cat];
+  if(want!=='mix'){ const f=pool.filter(q=>String(q.d||1)===want); if(f.length) pool=f; }
+  let fresh=pool.filter(q=>!asked.has(q));
+  if(!fresh.length){ pool.forEach(q=>asked.delete(q)); fresh=pool; }
+  const q=fresh[Math.floor(Math.random()*fresh.length)];
+  asked.add(q);
+  return q;
+}
+function askQuestion(cat, o){
+  const src=pick(cat);
+  Q={cat, src, p:o.player, crown:!!o.crown, badge:o.badge, onDone:o.onDone,
+     correct:src.a[0], opts:shuffle(src.a.slice()), used:{}, done:false, second:false, timer:null, left:LIMIT};
+  paintQuestion();
+  $('#qScrim').classList.add('open');
+  startTimer();
+}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+const HELPS=[
+  {id:'bomba', icon:'💣', name:'Bomba', desc:'Quita 2 malas', cost:25},
+  {id:'amigo', icon:'📞', name:'Amigo', desc:'Pide una pista', cost:30},
+  {id:'cambio',icon:'🔄', name:'Cambio', desc:'Otra pregunta', cost:20},
+  {id:'doble', icon:'❤️', name:'Segunda', desc:'Un fallo extra', cost:35}
+];
+function paintQuestion(){
+  const c=catById(Q.cat), p=Q.p;
+  $('#qHead').style.setProperty('--c',c.color);
+  $('#qModal').style.setProperty('--c',c.color);
+  $('#qCat').textContent=`${c.glyph} ${c.name}`;
+  $('#qBadge').textContent = Q.badge || (Q.crown ? `👑 Corona · ${p.name} ${p.emoji}` : `${p.name} ${p.emoji} · racha ${p.streak}`);
+  $('#qDiff').textContent = (Q.src.d||1)===2 ? 'Difícil' : 'Normal';
+  $('#qText').textContent=Q.src.q;
+  const box=$('#qOpts'); box.innerHTML='';
+  Q.opts.forEach(o=>{
+    const b=document.createElement('button');
+    b.className='opt'; b.textContent=o;
+    b.onclick=()=>answer(b,o);
+    box.appendChild(b);
+  });
+  $('#qVerdict').className='verdict';
+  const h=$('#qHelp'); h.innerHTML='';
+  HELPS.forEach(x=>{
+    const b=document.createElement('button');
+    b.className='hbtn'; b.disabled = Q.used[x.id] || p.coins<x.cost;
+    b.innerHTML=`<b>${x.icon}</b>${x.name}<small>🪙 ${x.cost}</small>`;
+    b.title=x.desc;
+    b.onclick=()=>useHelp(x);
+    h.appendChild(b);
+  });
+}
+function startTimer(){
+  Q.left=LIMIT;
+  const bar=$('#timerBar'), num=$('#timerNum');
+  bar.style.width='100%';
+  clearInterval(Q.timer);
+  let lastTick=99;
+  const paint=()=>{
+    const s=Math.max(0,Math.ceil(Q.left));
+    num.textContent=s+'s';
+    num.classList.toggle('low', Q.left<=5);
+    bar.style.width=Math.max(0,(Q.left/LIMIT)*100)+'%';
+    return s;
+  };
+  paint();
+  Q.timer=setInterval(()=>{
+    Q.left-=0.1;
+    const s=paint();
+    if(Q.left<=5 && s!==lastTick){ lastTick=s; SFX.tick(); }
+    if(Q.left<=0){clearInterval(Q.timer); timeout();}
+  },100);
+}
+function timeout(){
+  if(Q.done) return;
+  Q.done=true;
+  SFX.wrong();
+  Q.p.streak=0; renderPlayers();
+  [...$('#qOpts').children].forEach(b=>{
+    b.disabled=true;
+    if(b.textContent===Q.correct) b.classList.add('right');
+  });
+  verdict(`⏱ <b>Se acabó el tiempo.</b> La respuesta era: ${escapeHtml(Q.correct)}`);
+  finish(false);
+}
+function useHelp(x){
+  const p=Q.p;
+  if(p.coins<x.cost || Q.used[x.id] || Q.done) return;
+  p.coins-=x.cost; Q.used[x.id]=true; renderPlayers(); SFX.help();
+  if(x.id==='bomba'){
+    const wrong=[...$('#qOpts').children].filter(b=>b.textContent!==Q.correct && !b.classList.contains('gone'));
+    shuffle(wrong).slice(0,2).forEach(b=>{b.classList.add('gone'); b.disabled=true;});
+  }
+  if(x.id==='amigo'){
+    const others=state.players.filter(pp=>pp.id!==p.id).map(pp=>pp.name);
+    const friend=others.length? others[Math.floor(Math.random()*others.length)] : 'tu primo el sabelotodo';
+    const acierta=Math.random()<0.75;
+    const alive=[...$('#qOpts').children].filter(b=>!b.classList.contains('gone'));
+    const guess = acierta ? Q.correct : shuffle(alive.map(b=>b.textContent).filter(t=>t!==Q.correct))[0] || Q.correct;
+    alive.forEach(b=>{ if(b.textContent===guess) b.classList.add('hint'); });
+    verdict(`📞 ${escapeHtml(friend)} dice: «Casi seguro es <b>${escapeHtml(guess)}</b>… pero no me hagas mucho caso».`);
+  }
+  if(x.id==='cambio'){
+    clearInterval(Q.timer);
+    askQuestion(Q.cat,{player:Q.p,crown:Q.crown,badge:Q.badge,onDone:Q.onDone});
+    return;
+  }
+  if(x.id==='doble'){
+    Q.second=true;
+    verdict(`❤️ Tienes una segunda oportunidad: puedes fallar una vez.`);
+  }
+  [...$('#qHelp').children].forEach((b,i)=>{
+    b.disabled = Q.used[HELPS[i].id] || p.coins<HELPS[i].cost;
+  });
+}
+function verdict(html){const v=$('#qVerdict'); v.innerHTML=html; v.className='verdict show';}
+function answer(btn,val){
+  if(Q.done) return;
+  const p=Q.p;
+  if(val===Q.correct){
+    clearInterval(Q.timer); Q.done=true;
+    btn.classList.add('right');
+    [...$('#qOpts').children].forEach(b=>b.disabled=true);
+    p.streak++;
+    p.coins += Q.crown ? 25 : 12;
+    let msg = Q.crown
+      ? `👑 <b>¡Corona de ${catById(Q.cat).name}!</b> +🪙 25 y vuelves a lanzar.`
+      : `✅ <b>Correcto.</b> +🪙 12 · racha ${p.streak}`;
+    if(p.streak>=STREAK_GOAL) msg+=` <b>🔥 Racha de ${p.streak}: puedes cobrar una corona gratis en tu panel.</b>`;
+    Q.crown ? SFX.crown() : SFX.right();
+    renderPlayers();
+    verdict(msg);
+    finish(true);
+  }else{
+    btn.classList.add('wrong'); btn.disabled=true;
+    if(Q.second){
+      Q.second=false;
+      tone(330,0,.2,{type:'square',vol:.12,to:220});
+      verdict('❤️ Fallaste, pero la segunda oportunidad te salva. Prueba de nuevo.');
+      return;
+    }
+    clearInterval(Q.timer); Q.done=true;
+    SFX.wrong();
+    const had=p.streak; p.streak=0; renderPlayers();
+    [...$('#qOpts').children].forEach(b=>{
+      b.disabled=true;
+      if(b.textContent===Q.correct) b.classList.add('right');
+    });
+    verdict(`❌ <b>Nada que hacer.</b> Era: ${escapeHtml(Q.correct)}${had?` · racha perdida (iba en ${had})`:''}`);
+    finish(false);
+  }
+}
+function finish(ok){
+  [...$('#qHelp').children].forEach(b=>b.disabled=true);
+  const done=Q.onDone;
+  setTimeout(()=>{
+    $('#qScrim').classList.remove('open');
+    done(ok);
+  },2100);
+}
+function win(p){
+  SFX.win();
+  $('#wName').textContent=`Ganó ${p.name} ${p.emoji}`;
+  $('#wScrim').classList.add('open');
+}
+
+/* ============ SELECTOR (corona / duelo / racha) ============ */
+function picker(o){
+  $('#cTitle').textContent=o.title;
+  $('#cSub').textContent=o.sub||'';
+  const box=$('#cPicks'); box.innerHTML='';
+  o.items.forEach(it=>{
+    const b=document.createElement('button');
+    b.className='pick'; b.style.setProperty('--c',it.color||'#fff');
+    b.innerHTML=`<span class="pe">${it.emoji||''}</span><span>${escapeHtml(it.label)}</span>`;
+    b.onclick=()=>{ SFX.help(); $('#cScrim').classList.remove('open'); o.onPick(it.value); };
+    box.appendChild(b);
+  });
+  const cx=$('#cCancel');
+  cx.style.display=o.cancel?'':'none';
+  cx.onclick=()=>{ $('#cScrim').classList.remove('open'); if(o.onCancel) o.onCancel(); };
+  $('#cScrim').classList.add('open');
+}
+
+/* ============ MODALES ============ */
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=e=>e.target.closest('.scrim').classList.remove('open'));
+let pickedEmoji=null;
+function paintEmojis(){
+  const taken=state.players.filter(p=>!editing||p.id!==editing).map(p=>p.emoji);
+  const box=$('#pEmojis'); box.innerHTML='';
+  EMOJIS.forEach(e=>{
+    const b=document.createElement('button');
+    b.className='em'+(e===pickedEmoji?' sel':'')+(taken.includes(e)?' taken':'');
+    b.textContent=e; b.type='button';
+    b.onclick=()=>{ pickedEmoji=e; SFX.help(); paintEmojis(); };
+    box.appendChild(b);
+  });
+}
+function openPlayerModal(id){
+  editing=id||null;
+  const p=id? state.players.find(x=>x.id===id) : null;
+  $('#pTitle').textContent = p? 'Editar jugador' : 'Agregar jugador';
+  $('#pSave').textContent = p? 'Guardar' : 'Agregar';
+  $('#pName').value = p? p.name : '';
+  const taken=state.players.filter(x=>!p||x.id!==p.id).map(x=>x.emoji);
+  pickedEmoji = p? p.emoji : (EMOJIS.find(e=>!taken.includes(e))||EMOJIS[0]);
+  paintEmojis();
+  $('#pScrim').classList.add('open');
+  if(!p) $('#pName').focus();
+}
+$('#addPlayerBtn').onclick=()=>openPlayerModal(null);
+$('#pSave').onclick=()=>{
+  const n=$('#pName').value.trim();
+  if(!n){ $('#pName').focus(); return; }
+  if(editing){
+    const p=state.players.find(x=>x.id===editing);
+    p.name=n; p.emoji=pickedEmoji;
+  }else{
+    const p=newPlayer(n,state.players.length);
+    p.emoji=pickedEmoji;
+    state.players.push(p);
+  }
+  editing=null;
+  $('#pScrim').classList.remove('open');
+  renderAll();
+};
+$('#pName').addEventListener('keydown',e=>{if(e.key==='Enter')$('#pSave').click();});
+
+$('#nqCat').innerHTML=CATS.map(c=>`<option value="${c.id}">${c.glyph} ${c.name}</option>`).join('');
+$('#limit').onchange=e=>{ LIMIT=+e.target.value; };
+$('#nqOpts').innerHTML=[0,1,2,3].map(i=>`
+  <div class="row" style="margin-bottom:6px">
+    <input type="radio" name="nqc" value="${i}" ${i===0?'checked':''} aria-label="Marcar opción ${i+1} como correcta">
+    <input class="nqa" placeholder="Respuesta ${i+1}">
+  </div>`).join('');
+$('#addQBtn').onclick=()=>$('#nqScrim').classList.add('open');
+$('#nqSave').onclick=()=>{
+  const cat=$('#nqCat').value;
+  const text=$('#nqText').value.trim();
+  const opts=[...document.querySelectorAll('.nqa')].map(i=>i.value.trim());
+  const ci=+document.querySelector('input[name=nqc]:checked').value;
+  if(!text||opts.some(o=>!o)) { alert('Completa la pregunta y las cuatro respuestas.'); return; }
+  const ordered=[opts[ci],...opts.filter((_,i)=>i!==ci)];
+  QUESTIONS[cat].push({q:text,a:ordered,d:+$('#nqDiff').value});
+  $('#nqText').value=''; document.querySelectorAll('.nqa').forEach(i=>i.value='');
+  $('#nqScrim').classList.remove('open');
+  renderLegend();
+};
+$('#exportBtn').onclick=()=>{
+  const blob=new Blob([JSON.stringify(QUESTIONS,null,1)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='preguntas-corona.json'; a.click();
+  URL.revokeObjectURL(a.href);
+};
+$('#importBtn').onclick=()=>$('#fileIn').click();
+$('#fileIn').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const data=JSON.parse(r.result);
+      CATS.forEach(c=>{ if(Array.isArray(data[c.id])) QUESTIONS[c.id]=data[c.id]; });
+      renderLegend();
+      alert('Preguntas cargadas.');
+    }catch(err){ alert('Ese archivo no tiene el formato esperado.'); }
+    e.target.value='';
+  };
+  r.readAsText(f);
+};
+$('#resetBtn').onclick=()=>{ if(confirm('¿Reiniciar la partida con los mismos jugadores?')) reset(rosterOf()); };
+$('#wAgain').onclick=()=>{$('#wScrim').classList.remove('open'); reset(rosterOf());};
+
+reset();
+</script>
+</body>
+</html>

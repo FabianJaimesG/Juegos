@@ -238,6 +238,7 @@
 }
 .deckbtn small { font-size: 0.7rem; opacity: 0.75; font-weight: 700; }
 .deckbtn:disabled { background: #cbd5e1; color: #64748b; cursor: not-allowed; opacity: 0.85; }
+.deckbtn--bonus { background: linear-gradient(135deg, #fde047, #eab308); color: #422006; font-weight: 700; }
 
 .overlay--card { align-items: center; z-index: 20; }
 .gcard {
