@@ -1453,9 +1453,15 @@ function CardPacksPanel({ packs, setPacks, sym }: {
     <>
       <h2>Cartas — modalidades de juego</h2>
       <p className="hint">
-        Los mazos de 📦 Arca Comunal y ❓ Fortuna se arman al empezar la partida.
+        Los mazos se arman al empezar la partida con las modalidades marcadas.
         Ahora mismo: <b>{total} cartas</b> en juego.
       </p>
+      {total === 0 && (
+        <p className="pack__todo">
+          🚫 Sin modalidades activas se juega <b>sin cartas</b>: no aparecerán los botones de
+          robar en la barra de turno. Puedes volver a activarlas antes de empezar.
+        </p>
+      )}
       <div className="packs">
         {Object.entries(PACKS).map(([id, pack]) => {
           const on = packs.includes(id);
@@ -1472,8 +1478,7 @@ function CardPacksPanel({ packs, setPacks, sym }: {
                   <input
                     type="checkbox"
                     checked={on}
-                    disabled={pack.fixed}
-                    title={pack.fixed ? 'Siempre activa' : on ? 'Quitar del juego' : 'Añadir al juego'}
+                    title={on ? 'Quitar del juego' : 'Añadir al juego'}
                     onChange={(e) => toggle(id, e.target.checked)}
                   />
                 </span>

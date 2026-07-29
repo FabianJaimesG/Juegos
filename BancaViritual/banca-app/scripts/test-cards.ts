@@ -1,5 +1,5 @@
 // Verificación de las cartas (Arca Comunal / Fortuna). Ejecutar: npx tsx scripts/test-cards.ts
-import { CARDS, cardsFor, copiesOf, deckIds, getCard, isAutomatic, PACKS, packSize, WHEEL } from '../src/domain/cards';
+import { activeDecks, CARDS, cardsFor, copiesOf, deckIds, getCard, isAutomatic, PACKS, packSize, WHEEL } from '../src/domain/cards';
 import { createGame, reducer, type Action, type GameState } from '../src/game/engine';
 import { GAME_CONFIG } from '../src/domain/config';
 
@@ -388,6 +388,29 @@ const gAgain = reducer(gBack, { type: 'START_GAME' });
 ok(gAgain.started && cashOf(gAgain, ea) === gAgain.settings.initialBalance, 'volver a empezar repone el dinero');
 ok(gAgain.players.find((p) => p.id === ea)!.holdings.length === 0, 'y devuelve las propiedades al banco');
 ok(gAgain.decks.arca.draw.length === 16, 'y se rebarajan los mazos');
+
+console.log('26) Jugar sin cartas (todas las modalidades apagadas)');
+ok(Object.values(PACKS).every((pk) => !('fixed' in pk)), 'ninguna modalidad es obligatoria');
+let gNo = createGame('NOCARD');
+gNo = { ...gNo, settings: { ...gNo.settings, cardPacks: [] } };
+gNo = run(gNo, { type: 'ADD_PLAYER', name: 'Ana' }, { type: 'ADD_PLAYER', name: 'Beto' }, { type: 'START_GAME' });
+const na = gNo.players[0].id;
+ok(gNo.started, 'la partida empieza igual');
+ok(gNo.decks.arca.draw.length === 0 && gNo.decks.fortuna.draw.length === 0, 'los mazos quedan vacíos');
+ok(activeDecks([]).length === 0, 'no se ofrece ningún mazo en la barra de turno');
+ok(reducer(gNo, { type: 'DRAW_CARD', deck: 'arca', playerId: na }) === gNo, 'robar no hace nada');
+// El resto del juego sigue funcionando con normalidad.
+const gCompraNo = reducer(gNo, { type: 'BUY_PROPERTY', playerId: na, propertyId: 'boardwalk' });
+ok(gCompraNo.players[0].holdings.length === 1, 'comprar propiedades funciona sin cartas');
+ok(reducer(gNo, { type: 'PLAYER_TO_BANK', playerId: na, amount: 100 }).pot === 0,
+  'y sin Parada Libre el dinero va al banco, no a un bote');
+// Solo una modalidad de expansión, sin las clásicas.
+let gSolo = createGame('SOLO');
+gSolo = { ...gSolo, settings: { ...gSolo.settings, cardPacks: ['enredos'] } };
+gSolo = run(gSolo, { type: 'ADD_PLAYER', name: 'Ana' }, { type: 'START_GAME' });
+ok(gSolo.decks.arca.draw.length === cardsFor('arca', ['enredos']).length,
+  'se puede jugar con una expansión y sin las clásicas');
+ok(!gSolo.decks.arca.draw.includes('arca-error-bancario'), 'no se cuela ninguna carta clásica');
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} ok, ${fail} fallidas`);
 process.exit(fail === 0 ? 0 : 1);

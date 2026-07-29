@@ -82,8 +82,6 @@ export interface PackDef {
   desc: string;
   /** Color de identidad de la modalidad (cinta de la carta y panel). */
   color: string;
-  /** Siempre activa, no se puede desmarcar. */
-  fixed?: boolean;
   /** Aviso cuando la modalidad necesita mecánica que aún no existe. */
   todo?: string;
 }
@@ -95,7 +93,6 @@ export const PACKS: Record<string, PackDef> = {
     emoji: '🎩',
     desc: 'Las 32 cartas de siempre: cobros, pagos y visitas a la cárcel.',
     color: '#2f6f4e',
-    fixed: true,
   },
   prision: {
     label: 'Prisión',
