@@ -174,5 +174,17 @@ let grsM = reducer(grs, { type: 'MORTGAGE', playerId: betoR, propertyId: 'orient
 const grsM2 = reducer(grsM, { type: 'RENT_TO_SPIN', ownerId: betoR });
 ok(spinsOf(grsM2, betoR) === spinsOf(grsM, betoR), 'con la única propiedad hipotecada, no se entrega la ficha');
 
+console.log('10) En la cárcel no se roban cartas de Fortuna/Arca');
+let gj = createGame('JAIL');
+gj = run(gj,
+  { type: 'ADD_PLAYER', name: 'Ana', admin: true },
+  { type: 'ADD_PLAYER', name: 'Beto' },
+  { type: 'START_GAME' },
+);
+const anaJ = gj.players[0].id;
+gj = { ...gj, players: gj.players.map((p) => (p.id === anaJ ? { ...p, jail: 1 } : p)) };
+const gjDraw = reducer(gj, { type: 'DRAW_CARD', deck: 'fortuna', playerId: anaJ });
+ok(gjDraw.drawnCard === null, 'en la cárcel, DRAW_CARD no saca carta');
+
 console.log(`\n${pass} ok, ${fail} fallos`);
 process.exit(fail ? 1 : 0);

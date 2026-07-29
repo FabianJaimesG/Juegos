@@ -993,6 +993,7 @@ export function reducer(s: GameState, a: Action): GameState {
     case 'DRAW_CARD': {
       const p = s.players.find((x) => x.id === a.playerId);
       if (!p || s.drawnCard) return s; // hay una carta sin resolver
+      if (p.jail > 0) return s; // en la cárcel no te mueves: no caes en Fortuna/Arca
       let d = s.decks[a.deck];
       // Mazo agotado: se rebaraja el descarte (las retenidas no vuelven).
       if (d.draw.length === 0) {

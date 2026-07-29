@@ -264,8 +264,8 @@ export default function App() {
                   key={d}
                   className="deckbtn"
                   style={{ ['--deck-color' as string]: DECKS[d].color }}
-                  disabled={!myTurn || !!state.drawnCard || deckLeft(state, d) === 0}
-                  title={`${DECKS[d].label} — ${deckLeft(state, d)} cartas`}
+                  disabled={!myTurn || !!state.drawnCard || deckLeft(state, d) === 0 || turnPlayer.jail > 0}
+                  title={turnPlayer.jail > 0 ? 'En la cárcel no te mueves: no se roban cartas' : `${DECKS[d].label} — ${deckLeft(state, d)} cartas`}
                   onClick={() => act({ type: 'DRAW_CARD', deck: d, playerId: turnPlayer.id })}
                 >
                   {DECKS[d].emoji} <small>{deckLeft(state, d)}</small>
