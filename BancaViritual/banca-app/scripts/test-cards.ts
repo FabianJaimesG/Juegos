@@ -1,6 +1,6 @@
 // Verificación de las cartas (Arca Comunal / Fortuna). Ejecutar: npx tsx scripts/test-cards.ts
 import { activeDecks, CARDS, cardsFor, copiesOf, deckIds, getCard, isAutomatic, PACKS, packSize, WHEEL } from '../src/domain/cards';
-import { canCancelTrade, canRespondToTrade, createGame, reducer, winnerOf, type Action, type GameState } from '../src/game/engine';
+import { canCancelTrade, canRespondToTrade, canUseCard, createGame, reducer, whyCannotUseCard, winnerOf, type Action, type GameState } from '../src/game/engine';
 import { GAME_CONFIG } from '../src/domain/config';
 
 let pass = 0;
@@ -80,8 +80,13 @@ let gj = run(stack(g, 'arca-salir-carcel'), { type: 'DRAW_CARD', deck: 'arca', p
 const betoP = gj.players.find((p) => p.id === beto)!;
 ok(betoP.tokens.length === 1, 'la carta queda en la mano del jugador');
 ok(gj.decks.arca.discard.length === 0, 'no va al descarte mientras se conserva');
+// Solo se puede usar estando preso: si no, no se consume.
+ok(reducer(gj, { type: 'USE_CARD', playerId: beto, cardId: 'arca-salir-carcel' }) === gj,
+  'estando libre, la carta no se gasta');
+gj = reducer(gj, { type: 'GO_TO_JAIL', playerId: beto });
 gj = reducer(gj, { type: 'USE_CARD', playerId: beto, cardId: 'arca-salir-carcel' });
-ok(gj.players.find((p) => p.id === beto)!.tokens.length === 0, 'al usarla sale de la mano');
+ok(gj.players.find((p) => p.id === beto)!.tokens.length === 0, 'estando preso sí sale de la mano');
+ok(gj.players.find((p) => p.id === beto)!.jail === 0, 'y lo saca de la cárcel');
 ok(gj.decks.arca.discard[0] === 'arca-salir-carcel', 'y vuelve al descarte');
 
 console.log('5) Cartas instructivas (movimiento)');
@@ -614,6 +619,51 @@ ok(winnerOf(gUno) === null, 'con un solo jugador en la partida, tampoco');
 // Volver a empezar borra la victoria.
 const gOtra = reducer(reducer(gW2, { type: 'END_GAME' }), { type: 'START_GAME' });
 ok(winnerOf(gOtra) === null, 'al reiniciar ya no hay ganador (vuelven todos)');
+
+console.log('35) Una carta no se gasta si ahora no haría nada');
+const conCarta = (st: GameState, id: string, cardId: string): GameState =>
+  ({ ...st, players: st.players.map((p) => (p.id === id ? { ...p, tokens: [cardId] } : p)) });
+
+// Indulto: solo estando preso.
+const libre = conCarta(g, ana, 'arca-salir-carcel');
+ok(!canUseCard(libre, libre.players.find((p) => p.id === ana)!, 'arca-salir-carcel'), 'sin estar preso no se puede usar');
+ok(whyCannotUseCard(libre, libre.players.find((p) => p.id === ana)!, 'arca-salir-carcel')
+  === 'Solo sirve estando en la cárcel', 'y dice por qué');
+const gGasto = reducer(libre, { type: 'USE_CARD', playerId: ana, cardId: 'arca-salir-carcel' });
+ok(gGasto === libre, 'usarla fuera de la cárcel no la consume');
+const preso = reducer(libre, { type: 'GO_TO_JAIL', playerId: ana });
+ok(canUseCard(preso, preso.players.find((p) => p.id === ana)!, 'arca-salir-carcel'), 'estando preso sí');
+const gSale = reducer(preso, { type: 'USE_CARD', playerId: ana, cardId: 'arca-salir-carcel' });
+ok(gSale.players.find((p) => p.id === ana)!.jail === 0, 'y sale de la cárcel');
+ok(gSale.players.find((p) => p.id === ana)!.tokens.length === 0, 'gastando la carta');
+
+// Gran Premio con el bote vacío: no se malgasta.
+const sinBote = conCarta({ ...gPL, pot: 0 }, pa, 'par-gran-premio');
+ok(!canUseCard(sinBote, sinBote.players.find((p) => p.id === pa)!, 'par-gran-premio'), 'no se usa con el bote vacío');
+ok(reducer(sinBote, { type: 'USE_CARD', playerId: pa, cardId: 'par-gran-premio' }) === sinBote, 'y no se consume');
+const conBote = { ...sinBote, pot: 300 };
+ok(canUseCard(conBote, conBote.players.find((p) => p.id === pa)!, 'par-gran-premio'), 'con bote sí se puede');
+
+// Limusina: no se gasta si ya la llevas.
+const yaLimo = { ...conCarta(gPL, pa, 'par-limusina'), limoPlayerId: pa };
+ok(!canUseCard(yaLimo, yaLimo.players.find((p) => p.id === pa)!, 'par-limusina'), 'no se gasta si ya la tienes');
+
+// Las demás no tienen restricción.
+const casa = conCarta(gPL, pa, 'par-casa-gratis');
+ok(canUseCard(casa, casa.players.find((p) => p.id === pa)!, 'par-casa-gratis'), 'la casa gratis se puede usar siempre');
+
+console.log('36) Salida automática de la cárcel');
+let gAuto = run(createGame('JAIL'),
+  { type: 'ADD_PLAYER', name: 'Ana' }, { type: 'ADD_PLAYER', name: 'Beto' }, { type: 'START_GAME' });
+const [ka] = gAuto.players.map((p) => p.id);
+gAuto = reducer(gAuto, { type: 'GO_TO_JAIL', playerId: ka });
+const turnos = (st: GameState): GameState => reducer(reducer(st, { type: 'NEXT_TURN' }), { type: 'NEXT_TURN' });
+gAuto = turnos(gAuto);
+ok(gAuto.players.find((p) => p.id === ka)!.jail === 2, 'segunda ronda: sigue preso');
+gAuto = turnos(gAuto);
+ok(gAuto.players.find((p) => p.id === ka)!.jail === 3, 'tercera: sigue preso');
+gAuto = turnos(gAuto);
+ok(gAuto.players.find((p) => p.id === ka)!.jail === 0, 'a la cuarta sale solo, sin tocar ningún botón');
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} ok, ${fail} fallidas`);
 process.exit(fail === 0 ? 0 : 1);

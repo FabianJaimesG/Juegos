@@ -349,6 +349,32 @@ export function canCancelTrade(s: GameState, meId: string | null, isAdmin: boole
 }
 
 /**
+ * ¿Tiene sentido usar ahora esta carta guardada? Devuelve el motivo por el que
+ * NO se puede, o `null` si se puede.
+ *
+ * Sin esto, una carta se consumía aunque su efecto no aplicara: gastar el
+ * indulto sin estar preso, o el Gran Premio con el bote vacío.
+ */
+export function whyCannotUseCard(s: GameState, p: RuntimePlayer, cardId: string): string | null {
+  const card = getCard(cardId);
+  if (!card) return 'Carta desconocida';
+  if (!p.tokens.includes(cardId)) return 'No la tienes';
+  switch (card.effect.kind) {
+    case 'jail_free':
+      return p.jail > 0 ? null : 'Solo sirve estando en la cárcel';
+    case 'pot_take':
+      return s.pot > 0 ? null : 'La Parada Libre está vacía';
+    case 'limo':
+      return s.limoPlayerId === p.id ? 'Ya llevas la limusina' : null;
+    default:
+      return null;
+  }
+}
+
+export const canUseCard = (s: GameState, p: RuntimePlayer, cardId: string): boolean =>
+  whyCannotUseCard(s, p, cardId) === null;
+
+/**
  * Ganador de la partida: el único que sigue en pie cuando todos los demás
  * están en bancarrota. `null` mientras queden dos o más jugando.
  */
@@ -1012,6 +1038,8 @@ export function reducer(s: GameState, a: Action): GameState {
       if (!p || !p.tokens.includes(a.cardId)) return s;
       const card = getCard(a.cardId);
       if (!card) return s;
+      // No se consume una carta que ahora mismo no haría nada.
+      if (!canUseCard(s, p, a.cardId)) return s;
       // Gasta solo una copia, aunque tenga varias iguales.
       const i = p.tokens.indexOf(a.cardId);
       const tokens = [...p.tokens.slice(0, i), ...p.tokens.slice(i + 1)];

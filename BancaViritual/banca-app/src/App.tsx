@@ -9,6 +9,7 @@ import {
   canCancelTrade,
   canRespondToTrade,
   createGame,
+  whyCannotUseCard,
   winnerOf,
   type GameSettings,
   type GameState,
@@ -339,7 +340,6 @@ export default function App() {
             onSalida={() => act({ type: 'SALIDA', playerId: p.id })}
             onJail={() => act({ type: 'GO_TO_JAIL', playerId: p.id })}
             onPayBail={() => act({ type: 'PAY_BAIL', playerId: p.id })}
-            onLeaveJail={() => act({ type: 'LEAVE_JAIL', playerId: p.id })}
             hasLimo={state.limoPlayerId === p.id}
             bailText={money(GAME_CONFIG.bail)}
             jailTurns={GAME_CONFIG.jailTurns}
@@ -372,7 +372,7 @@ export default function App() {
 
 function PlayerTile({
   p, money, isCurrent, canControl, canTrade, isSelf, onOpen, onSalida, onBankrupt,
-  onJail, onPayBail, onLeaveJail, hasLimo, bailText, jailTurns,
+  onJail, onPayBail, hasLimo, bailText, jailTurns,
 }: {
   p: RuntimePlayer;
   money: (n: number) => string;
@@ -385,7 +385,6 @@ function PlayerTile({
   onBankrupt: () => void;
   onJail: () => void;
   onPayBail: () => void;
-  onLeaveJail: () => void;
   hasLimo: boolean;
   bailText: string;
   jailTurns: number;
@@ -408,11 +407,10 @@ function PlayerTile({
       </div>
       {p.jail > 0 && (
         <div className="ptile__jail">
-          <span>🚔 En la cárcel · turno {p.jail}/{jailTurns}</span>
+          <span>🚔 En la cárcel · turno {p.jail}/{jailTurns} · sales solo al {jailTurns}.º</span>
           {canControl && (
             <span className="ptile__jailbtns">
-              <button onClick={onPayBail} title={`Pagar la fianza (${bailText})`}>Fianza {bailText}</button>
-              <button onClick={onLeaveJail} title="Sacaste dobles o te liberan">Salir</button>
+              <button onClick={onPayBail} title={`Pagar la fianza (${bailText}) y salir ya`}>Fianza {bailText}</button>
             </span>
           )}
         </div>
@@ -496,7 +494,7 @@ function SheetContent({
   }
 
   if (sheet.kind === 'hand') {
-    return <HandPanel me={me} act={act} sym={state.currencySymbol} readOnly={!mine} close={close} />;
+    return <HandPanel me={me} state={state} act={act} sym={state.currencySymbol} readOnly={!mine} close={close} />;
   }
 
   if (sheet.kind === 'edit') {
@@ -857,8 +855,9 @@ function Market({
  * Cartas guardadas de un jugador: se ven enteras y se usan cuando él decide.
  * Las de Bonificación se acumulan aquí en vez de aplicarse al robarlas.
  */
-function HandPanel({ me, act, sym, readOnly, close }: {
+function HandPanel({ me, state, act, sym, readOnly, close }: {
   me: RuntimePlayer;
+  state: GameState;
   act: ReturnType<typeof useGame>['act'];
   sym: string;
   readOnly: boolean;
@@ -877,15 +876,24 @@ function HandPanel({ me, act, sym, readOnly, close }: {
           const c = getCard(cardId);
           if (!c) return null;
           const deck = DECKS[c.deck];
+          const why = whyCannotUseCard(state, me, cardId);
           return (
             <article key={`${cardId}-${i}`} className="handcard" style={{ ['--deck-color' as string]: deck.color }}>
               <header className="handcard__band">{deck.emoji} {deck.label}</header>
               <div className="handcard__emoji">{c.emoji}</div>
               <p className="handcard__text">{cardText(c, sym)}</p>
               {!readOnly && (
-                <button className="confirm" onClick={() => { act({ type: 'USE_CARD', playerId: me.id, cardId }); }}>
-                  Usar ahora
-                </button>
+                <>
+                  <button
+                    className="confirm"
+                    disabled={!!why}
+                    title={why ?? ''}
+                    onClick={() => { act({ type: 'USE_CARD', playerId: me.id, cardId }); }}
+                  >
+                    Usar ahora
+                  </button>
+                  {why && <p className="handcard__why">{why}</p>}
+                </>
               )}
             </article>
           );
