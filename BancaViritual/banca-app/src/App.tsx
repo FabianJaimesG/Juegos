@@ -95,9 +95,9 @@ function holdingSortKey(propertyId: string): number {
  * esquinas). Es fijo y `pointer-events:none`, así que nunca bloquea la
  * interacción; el contenido lleva margen suficiente para no quedar debajo.
  */
-function BoardFrame() {
+function BoardFrame({ rich = false }: { rich?: boolean }) {
   return (
-    <div className="boardframe" aria-hidden>
+    <div className={`boardframe ${rich ? 'boardframe--rich' : ''}`} aria-hidden>
       <span className="boardframe__bar boardframe__bar--top" />
       <span className="boardframe__bar boardframe__bar--bottom" />
       <span className="boardframe__bar boardframe__bar--left" />
@@ -245,7 +245,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <BoardFrame />
+      <BoardFrame rich={isViewer} />
       <header className="topbar">
         <h1>
           🏦 Banca <span className="code">{hasSupabase ? '🟢' : '⚪'} Sala {state.code}</span>
@@ -2129,6 +2129,7 @@ function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
 
   return (
     <div className="setup">
+      <BoardFrame />
       <h1>🏦 Banca — Preparación <span className="code">Sala {state.code}</span></h1>
       <div className="setup__top">
         <button onClick={share}>🔗 Compartir enlace</button>
