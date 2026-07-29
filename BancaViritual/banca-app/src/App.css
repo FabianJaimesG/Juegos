@@ -240,6 +240,15 @@
 .deckbtn:disabled { background: #cbd5e1; color: #64748b; cursor: not-allowed; opacity: 0.85; }
 
 .overlay--card { align-items: center; z-index: 20; }
+
+/* Deshacer/rehacer dentro de un modal (la cabecera queda tapada por el modal) */
+.modalhist { display: flex; gap: 0.4rem; justify-content: center; margin: 0.5rem 0 0.2rem; }
+.modalhist button {
+  background: rgba(255,255,255,.15); color: inherit; border: 1px solid rgba(255,255,255,.35);
+  border-radius: 999px; padding: 0.25rem 0.7rem; cursor: pointer; font-size: 0.8rem; font-weight: 700;
+}
+.modalhist button:hover:not(:disabled) { background: rgba(255,255,255,.28); }
+.modalhist button:disabled { opacity: 0.4; cursor: not-allowed; }
 .gcard {
   background: var(--card); border: 1px solid var(--line); border-radius: 16px;
   width: min(92vw, 420px); overflow: hidden; text-align: center;

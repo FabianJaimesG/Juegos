@@ -299,6 +299,10 @@ export default function App() {
           act={act}
           canAct={canControl(state.wheel.playerId)}
           onHide={() => setHiddenCard('wheel')}
+          undo={undo}
+          redo={redo}
+          canUndo={canUndo}
+          canRedo={canRedo}
         />
       )}
 
@@ -316,6 +320,10 @@ export default function App() {
           money={money}
           canAct={canControl(state.drawnCard.playerId)}
           onHide={() => setHiddenCard(state.drawnCard!.cardId)}
+          undo={undo}
+          redo={redo}
+          canUndo={canUndo}
+          canRedo={canRedo}
         />
       )}
 
@@ -1415,11 +1423,15 @@ function LiquidateBox({ me, act, money }: {
  * Ruleta a pantalla completa: gira de verdad hasta dejar el sector ganador bajo
  * el puntero. Los ocho sectores llevan escrito lo que dan.
  */
-function WheelModal({ state, act, canAct, onHide }: {
+function WheelModal({ state, act, canAct, onHide, undo, redo, canUndo, canRedo }: {
   state: GameState;
   act: ReturnType<typeof useGame>['act'];
   canAct: boolean;
   onHide: () => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }) {
   const w = state.wheel!;
   const face = getWheelFace(w.faceId);
@@ -1455,6 +1467,7 @@ function WheelModal({ state, act, canAct, onHide }: {
     <div className="overlay overlay--card">
       <div className="wheel" style={{ ['--tone' as string]: good ? '#16a34a' : '#dc2626' }}>
         <header className="wheel__band">🎡 LA RULETA</header>
+        <HistoryControls undo={undo} redo={redo} canUndo={canUndo} canRedo={canRedo} />
 
         <div className="wheel__stage">
           <span className="wheel__pointer" />
@@ -1512,16 +1525,36 @@ function deckLeft(state: GameState, d: DeckId): number {
 }
 
 /**
+ * Deshacer/rehacer dentro de un modal (carta o ruleta). El modal cubre la
+ * cabecera, así que sin esto no se podría seguir deshaciendo un error hecho en
+ * una carta. Nunca se bloquea por la animación: solo por el historial.
+ */
+function HistoryControls({ undo, redo, canUndo, canRedo }: {
+  undo: () => void; redo: () => void; canUndo: boolean; canRedo: boolean;
+}) {
+  return (
+    <div className="modalhist">
+      <button onClick={undo} disabled={!canUndo} title="Deshacer">↶ Deshacer</button>
+      <button onClick={redo} disabled={!canRedo} title="Rehacer">↷ Rehacer</button>
+    </div>
+  );
+}
+
+/**
  * Carta robada, a pantalla completa y visible para toda la sala.
  * Solo quien controla al jugador puede resolverla.
  */
-function CardModal({ drawn, state, act, money, canAct, onHide }: {
+function CardModal({ drawn, state, act, money, canAct, onHide, undo, redo, canUndo, canRedo }: {
   drawn: NonNullable<GameState['drawnCard']>;
   state: GameState;
   act: ReturnType<typeof useGame>['act'];
   money: (n: number) => string;
   canAct: boolean;
   onHide: () => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }) {
   const card = getCard(drawn.cardId);
   const player = state.players.find((p) => p.id === drawn.playerId);
@@ -1566,6 +1599,7 @@ function CardModal({ drawn, state, act, money, canAct, onHide }: {
     <div className="overlay overlay--card">
       <div className="gcard" style={{ ['--deck-color' as string]: deck.color }}>
         <header className="gcard__band">{deck.emoji} {deck.label}</header>
+        <HistoryControls undo={undo} redo={redo} canUndo={canUndo} canRedo={canRedo} />
         <div className="gcard__emoji">{card.emoji}</div>
         <p className="gcard__text">{cardText(card, state.currencySymbol)}</p>
         <div className="gcard__who">Para {player.icon} <b>{player.name}</b></div>
