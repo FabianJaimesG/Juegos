@@ -477,3 +477,38 @@
   margin-left: 0.4rem; background: #166534; color: #fff; border: 0;
   border-radius: 6px; padding: 0.2rem 0.5rem; cursor: pointer; font-size: 0.8rem;
 }
+
+/* Dados: más grandes y con tirada visible */
+.turnbar__dice { gap: 0.45rem !important; padding: 0.35rem 0.6rem !important; }
+.die {
+  font-size: 2.6rem !important; line-height: 1 !important;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,.2));
+}
+.die--rolling { animation: bv-tumble 0.4s linear infinite !important; }
+@keyframes bv-tumble {
+  0%   { transform: rotate(0deg)   scale(1);    }
+  25%  { transform: rotate(90deg)  scale(1.18); }
+  50%  { transform: rotate(180deg) scale(0.92); }
+  75%  { transform: rotate(270deg) scale(1.12); }
+  100% { transform: rotate(360deg) scale(1);    }
+}
+.turnbar__total { font-size: 1.25rem; font-weight: 800; }
+@media (prefers-reduced-motion: reduce) {
+  .die--rolling { animation-duration: 1.2s !important; }
+}
+
+/* Liquidar dentro de la carta */
+.liq { background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 0.5rem; text-align: left; }
+.liq__title { margin: 0 0 0.4rem; font-size: 0.85rem; font-weight: 700; color: var(--muted); }
+.liq__row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; font-size: 0.82rem; }
+.liq__name { flex: 1 1 auto; min-width: 0; }
+.liq__row button {
+  flex: 0 0 auto; background: #b45309; color: #fff; border: 0; border-radius: 6px;
+  padding: 0.25rem 0.5rem; cursor: pointer; font-size: 0.78rem;
+}
+.liq__done { color: var(--muted); font-size: 0.78rem; }
+.gcard__bankrupt {
+  background: #7f1d1d; color: #fff; border: 0; border-radius: 10px;
+  padding: 0.55rem; cursor: pointer; font-size: 0.9rem;
+}
+.turnbar__sp { font-size: 0.8rem; background: rgba(0,0,0,.06); border-radius: 6px; padding: 0.1rem 0.4rem; }

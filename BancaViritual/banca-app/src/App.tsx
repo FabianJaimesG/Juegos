@@ -1134,12 +1134,13 @@ function DiceView({ dice, onRoll, canRoll }: {
   const roll = () => {
     if (rolling || !canRoll) return;
     setRolling(true);
-    const iv = setInterval(() => setFaces([rand6(), rand6()]), 80);
+    // Tirada más larga y visible antes de mostrar el resultado.
+    const iv = setInterval(() => setFaces([rand6(), rand6()]), 70);
     setTimeout(() => {
       clearInterval(iv);
       setRolling(false);
       onRoll();
-    }, 700);
+    }, 1100);
   };
   const a = rolling ? faces[0] : dice?.a ?? 1;
   const b = rolling ? faces[1] : dice?.b ?? 1;
@@ -1147,7 +1148,12 @@ function DiceView({ dice, onRoll, canRoll }: {
     <span className="turnbar__dice">
       <span className={`die ${rolling ? 'die--rolling' : ''}`}>{DICE_FACES[a - 1]}</span>
       <span className={`die ${rolling ? 'die--rolling' : ''}`}>{DICE_FACES[b - 1]}</span>
-      {!rolling && dice && <span>= {dice.a + dice.b}{dice.special ? ` · ${dice.special}` : ''}</span>}
+      {!rolling && dice && (
+        <>
+          <span className="turnbar__total">= {dice.a + dice.b}</span>
+          {dice.special && <span className="turnbar__sp">{dice.special}</span>}
+        </>
+      )}
       {canRoll && <button onClick={roll} disabled={rolling}>{rolling ? '…' : 'Tirar'}</button>}
     </span>
   );
@@ -1184,16 +1190,13 @@ function ParadaLibreBar({ state, act, money, me, canControl }: {
             step={25}
             value={amount}
             onChange={(e) => setAmount(Math.max(0, parseInt(e.target.value, 10) || 0))}
-            title="Cuánto entra al bote"
+            title="Cuánto paga el jugador en turno al bote"
           />
-          <button onClick={() => act({ type: 'POT_ADD', amount })} title="El banco recibe un impuesto: va al bote">
-            + Banco
-          </button>
           <button
             onClick={() => act({ type: 'POT_ADD', amount, playerId: turn.id })}
-            title={`${turn.name} paga al bote`}
+            title={`${turn.name} deja este dinero en el bote`}
           >
-            + {turn.icon}
+            + {turn.icon} al bote
           </button>
           <button
             className="parada__take"
@@ -1248,6 +1251,43 @@ function ParadaLibreBar({ state, act, money, me, canControl }: {
           🤝 Renta → ficha
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Liquidar sin salir de la carta: hipotecar o vender casas para reunir el pago.
+ * Aparece dentro del modal cuando el jugador no tiene efectivo suficiente.
+ */
+function LiquidateBox({ me, act, money }: {
+  me: RuntimePlayer;
+  act: ReturnType<typeof useGame>['act'];
+  money: (n: number) => string;
+}) {
+  const rows = [...me.holdings].sort((a, b) => holdingSortKey(a.propertyId) - holdingSortKey(b.propertyId));
+  if (rows.length === 0) return <p className="gcard__hint">No tienes nada que liquidar.</p>;
+  return (
+    <div className="liq">
+      <p className="liq__title">🏦 Liquidar para pagar</p>
+      {rows.map((h) => {
+        const prop = getProperty(h.propertyId)!;
+        return (
+          <div key={h.propertyId} className="liq__row">
+            <span className="liq__name">{prop.name}{h.houses > 0 && ` · ${h.houses >= 5 ? '🏨' : '🏠'.repeat(h.houses)}`}</span>
+            {h.houses > 0 ? (
+              <button onClick={() => act({ type: 'SELL_HOUSE', playerId: me.id, propertyId: h.propertyId })}>
+                Vender casa +{money(Math.round(prop.houseCost * 0.5))}
+              </button>
+            ) : !h.mortgaged ? (
+              <button onClick={() => act({ type: 'MORTGAGE', playerId: me.id, propertyId: h.propertyId })}>
+                Hipotecar +{money(prop.mortgageValue)}
+              </button>
+            ) : (
+              <span className="liq__done">hipotecada</span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1394,8 +1434,13 @@ function CardModal({ drawn, state, act, money, canAct, onHide }: {
       ? `Pagar ${money(total)} (${b.houses}🏠 · ${b.hotels}🏨)`
       : 'Sin construcciones: no pagas nada';
   }
-  // No le alcanza: el botón no haría nada. Hay que decirlo y dejarlo salir.
+  // No le alcanza: el botón no haría nada. Hay que decirlo y dar salida real.
   const short = owed > 0 && player.cash - owed < 1;
+  // Cartas que cobran a los demás: puede que sea OTRO el que no puede pagar.
+  const debtors = e.kind === 'collect_each'
+    ? state.players.filter((p) => p.id !== player.id && !p.bankrupt && p.cash - e.amount < 1)
+    : [];
+  const blocked = short || debtors.length > 0;
   if (card.keep) action = 'Guardar carta';
 
   return (
@@ -1411,7 +1456,13 @@ function CardModal({ drawn, state, act, money, canAct, onHide }: {
         {short && (
           <p className="gcard__warn">
             ⚠️ No te alcanza: debes {money(owed)} y tienes {money(player.cash)}.
-            Cierra esta carta, hipoteca o vende algo, y vuelve a aplicarla desde <b>📩 Carta pendiente</b>.
+            Hipoteca o vende aquí abajo hasta reunirlo. Si no puedes, declárate en bancarrota.
+          </p>
+        )}
+        {debtors.length > 0 && (
+          <p className="gcard__warn">
+            ⏳ {debtors.map((d) => d.name).join(', ')} no {debtors.length > 1 ? 'pueden' : 'puede'} pagar.
+            Deben liquidar algo desde su dispositivo (o declararse en bancarrota) para poder cobrar.
           </p>
         )}
 
@@ -1422,14 +1473,24 @@ function CardModal({ drawn, state, act, money, canAct, onHide }: {
                 🟢 Pasé por SALIDA
               </button>
             )}
-            <button className="confirm" disabled={short} onClick={() => act({ type: 'RESOLVE_CARD' })}>{action}</button>
-            {/* Salida siempre disponible: si no, la carta bloquea la pantalla. */}
-            <button className="gcard__later" onClick={onHide}>Cerrar y resolver luego</button>
+            <button className="confirm" disabled={blocked} onClick={() => act({ type: 'RESOLVE_CARD' })}>{action}</button>
+            {/* Liquidar sin salir de la carta: se resuelve ahora, no se aplaza. */}
+            {short && <LiquidateBox me={player} act={act} money={money} />}
+            {short && (
+              <button
+                className="gcard__bankrupt"
+                onClick={() => { if (confirm(`¿Declararte en bancarrota, ${player.name}? Tus propiedades vuelven al banco.`)) act({ type: 'DECLARE_BANKRUPTCY', playerId: player.id }); }}
+              >
+                💀 Declararme en bancarrota
+              </button>
+            )}
           </div>
         ) : (
           <div className="gcard__btns">
             <p className="gcard__hint">Esperando a {player.name}…</p>
-            <button className="gcard__later" onClick={onHide}>Ocultar</button>
+            {/* Los demás sí pueden apartarla: si les toca liquidar para que
+                puedan cobrarles, no deben quedarse bloqueados. */}
+            <button className="gcard__later" onClick={onHide}>Ocultar y seguir jugando</button>
           </div>
         )}
       </div>

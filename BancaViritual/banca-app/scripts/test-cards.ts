@@ -501,5 +501,29 @@ ok(reducer(gCasas, { type: 'FORCE_SWAP', aId: sa, bId: sb, aProp: 'mediterranean
 const gCarta3 = playKeep(gS, 'par-intercambio', sa);
 ok(perks(gCarta3, sa).forceSwaps === 1, 'la carta 🔀 deja un intercambio pendiente');
 
+console.log('31) Anuncio de los dados (lo que se lee en voz alta)');
+const rollWith = (faceIdx: number | null): string => {
+  const base = faceIdx === null
+    ? { ...g, settings: { ...g.settings, special: false } }
+    : { ...g, settings: { ...g.settings, special: true } };
+  const real = Math.random;
+  let call = 0;
+  // 1º y 2º valores = dados (3 y 4); 3º = elección de cara especial.
+  Math.random = () => (call++ < 2 ? [0.4, 0.6][call - 1] : (faceIdx ?? 0) / 6);
+  try { return reducer(base, { type: 'ROLL_DICE' }).log[0].text; } finally { Math.random = real; }
+};
+const sinEsp = rollWith(null);
+ok(/^🎲 \d+$/.test(sinEsp), `sin dado especial solo se dice el total (${sinEsp})`);
+ok(!sinEsp.includes('+'), 'no se leen los dados por separado');
+const x2 = rollWith(0);
+ok(/^🎲 \d+$/.test(x2), `dobles: solo el resultado final (${x2})`);
+const b6 = rollWith(1);
+ok(/^🎲 \d+$/.test(b6), `+6: solo el total (${b6})`);
+const elige = rollWith(2);
+ok(/^🎲 \d+ o \d+ o \d+$/.test(elige), `elegir: x o y o z (${elige})`);
+const especial = rollWith(5);
+ok(especial.includes('avanza a la siguiente propiedad') && /🎲 \d+,/.test(especial),
+  `las demás: suma + el efecto (${especial})`);
+
 console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} ok, ${fail} fallidas`);
 process.exit(fail === 0 ? 0 : 1);

@@ -216,18 +216,24 @@ export type Action =
   | { type: 'NEXT_TURN' }
   | { type: 'REPLACE'; state: GameState }; // para sincronización (Realtime)
 
-// El jugador siempre ve ambos dados y la suma (puede elegir usar uno u otro o ambos).
-// La cara especial añade un efecto sorpresa; todas las caras tienen la misma probabilidad.
-const SPECIAL_FACES = [
-  '✖️ dobles (mueve el doble)',
-  '🔁 relanza',
-  '🚫 pierde turno',
-  '➕6 bonus',
-  '🏠 avanza a la siguiente propiedad',
-  '🎲 elige: un dado, el otro o ambos',
+/**
+ * Caras del dado especial (misma probabilidad todas).
+ * `say` es lo que se anuncia y se lee en voz alta: importa cuánto mover, no los
+ * números sueltos de cada dado, que ya se ven en pantalla.
+ */
+interface SpecialFace {
+  id: string;
+  label: string;
+  say: (a: number, b: number) => string;
+}
+const SPECIAL_FACES: SpecialFace[] = [
+  { id: 'x2', label: '✖️ dobles (mueve el doble)', say: (a, b) => `${(a + b) * 2}` },
+  { id: 'bonus6', label: '➕6 bonus', say: (a, b) => `${a + b + 6}` },
+  { id: 'choose', label: '🎲 elige: un dado, el otro o ambos', say: (a, b) => `${a} o ${b} o ${a + b}` },
+  { id: 'reroll', label: '🔁 relanza', say: (a, b) => `${a + b}, relanza` },
+  { id: 'skip', label: '🚫 pierde turno', say: (a, b) => `${a + b}, pierde turno` },
+  { id: 'next', label: '🏠 avanza a la siguiente propiedad', say: (a, b) => `${a + b}, avanza a la siguiente propiedad` },
 ];
-/** Prefijo que identifica la cara de "+6 bonus" (suma como un tercer dado). */
-const BONUS6 = '➕6';
 const d6 = () => Math.floor(Math.random() * 6) + 1;
 
 let counter = 0;
@@ -880,13 +886,11 @@ export function reducer(s: GameState, a: Action): GameState {
     case 'ROLL_DICE': {
       const a = d6();
       const b = d6();
-      const special = s.settings.special ? SPECIAL_FACES[Math.floor(Math.random() * SPECIAL_FACES.length)] : null;
-      // "+6 bonus" cuenta como un tercer dado: la suma total incluye los 6.
-      const bonus = special?.startsWith(BONUS6);
-      const txt = bonus
-        ? `🎲 ${a} + ${b} + 6 = ${a + b + 6} · ${special}`
-        : `🎲 ${a} + ${b} = ${a + b}${special ? ` · ${special}` : ''}`;
-      return { ...s, dice: { a, b, special }, log: log(s, txt) };
+      const face = s.settings.special ? SPECIAL_FACES[Math.floor(Math.random() * SPECIAL_FACES.length)] : null;
+      // Se anuncia el resultado útil (cuánto mover), no "a + b = c":
+      // los dados ya se ven en pantalla.
+      const txt = `🎲 ${face ? face.say(a, b) : a + b}`;
+      return { ...s, dice: { a, b, special: face ? face.label : null }, log: log(s, txt) };
     }
 
     case 'DRAW_CARD': {
