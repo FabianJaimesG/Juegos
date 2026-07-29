@@ -22,7 +22,9 @@ const sql = [
   `CREATE POLICY "room_insert" ON "Room" FOR INSERT WITH CHECK (true);`,
   `DROP POLICY IF EXISTS "room_update" ON "Room";`,
   `CREATE POLICY "room_update" ON "Room" FOR UPDATE USING (true) WITH CHECK (true);`,
-  `GRANT SELECT, INSERT, UPDATE ON "Room" TO anon, authenticated;`,
+  `DROP POLICY IF EXISTS "room_delete" ON "Room";`,
+  `CREATE POLICY "room_delete" ON "Room" FOR DELETE USING (true);`,
+  `GRANT SELECT, INSERT, UPDATE, DELETE ON "Room" TO anon, authenticated;`,
 ];
 
 const client = new Client({ connectionString: process.env.DATABASE_URL });

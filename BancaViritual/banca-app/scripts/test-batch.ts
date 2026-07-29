@@ -99,5 +99,34 @@ const before = g.log.length;
 gl = reducer(g, { type: 'EDIT_PLAYER', playerId: ana, admin: false });
 ok(gl.log.length === before, 'toggle de admin no genera entrada de historial');
 
+console.log('7) Pagar renta (auto y fija)');
+// Ana dueña de Av. Oriental (celeste, sin grupo completo). Beto (turno) paga renta base.
+let gp = setCash(g, ana, 5000);
+gp = reducer(gp, { type: 'BUY_PROPERTY', playerId: ana, propertyId: 'oriental' });
+gp = setCash(gp, beto, 1000);
+const betoBefore = gp.players.find((p) => p.id === beto)!.cash;
+const anaBefore = gp.players.find((p) => p.id === ana)!.cash;
+gp = reducer(gp, { type: 'PAY_RENT', fromId: beto, toId: ana, propertyId: 'oriental' });
+const betoAfter = gp.players.find((p) => p.id === beto)!.cash;
+const anaAfter = gp.players.find((p) => p.id === ana)!.cash;
+ok(betoBefore - betoAfter === 6 && anaAfter - anaBefore === 6, 'renta base celeste = 6, transferida de Beto a Ana');
+// Servicio sin tirada => bloqueado
+let gu = setCash(g, ana, 5000);
+gu = reducer(gu, { type: 'BUY_PROPERTY', playerId: ana, propertyId: 'electric' });
+gu = setCash(gu, beto, 1000);
+let gu2 = reducer(gu, { type: 'PAY_RENT', fromId: beto, toId: ana, propertyId: 'electric' });
+ok(gu2.players.find((p) => p.id === beto)!.cash === 1000, 'servicio sin tirada: pago bloqueado');
+// Con tirada: renta = (a+b) * 4
+gu = { ...gu, dice: { a: 3, b: 4, special: null } };
+gu2 = reducer(gu, { type: 'PAY_RENT', fromId: beto, toId: ana, propertyId: 'electric' });
+ok(1000 - gu2.players.find((p) => p.id === beto)!.cash === 28, 'servicio con tirada 7 → renta 28 (×4)');
+// Propiedad hipotecada: no se paga renta
+let gm = setCash(g, ana, 5000);
+gm = reducer(gm, { type: 'BUY_PROPERTY', playerId: ana, propertyId: 'oriental' });
+gm = reducer(gm, { type: 'MORTGAGE', playerId: ana, propertyId: 'oriental' });
+gm = setCash(gm, beto, 1000);
+const gm2 = reducer(gm, { type: 'PAY_RENT', fromId: beto, toId: ana, propertyId: 'oriental' });
+ok(gm2.players.find((p) => p.id === beto)!.cash === 1000, 'propiedad hipotecada: no genera renta');
+
 console.log(`\n${pass} ok, ${fail} fallos`);
 process.exit(fail ? 1 : 0);

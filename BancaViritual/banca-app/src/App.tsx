@@ -25,7 +25,7 @@ import { useGame } from './game/useGame';
 import { useIdentity } from './game/useIdentity';
 import { useRealtimeSync } from './game/sync';
 import { useWealthHistory } from './game/useWealthHistory';
-import { hasSupabase } from './lib/supabase';
+import { hasSupabase, supabase } from './lib/supabase';
 
 const PLAYER_COLORS = ['#e11d48', '#2563eb', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#dc2626', '#4f46e5'];
 
@@ -87,8 +87,13 @@ export default function App() {
   const sym = state.currencySymbol;
   const money = (n: number) => `${sym}${n.toLocaleString('es')}`;
 
-  // Sincronización en vivo (tabla Room + Realtime).
-  useRealtimeSync(state.code, state, (s) => act({ type: 'REPLACE', state: s }));
+  // Sincronización en vivo (tabla Room + Realtime). Si otro elimina la sala, salimos a una nueva.
+  useRealtimeSync(
+    state.code,
+    state,
+    (s) => act({ type: 'REPLACE', state: s }),
+    () => { setMe(null); reset(true); alert('La sala fue eliminada. Se creó una sala nueva.'); },
+  );
 
   const join = (raw: string) => {
     const c = raw.trim().toUpperCase();
@@ -144,6 +149,21 @@ export default function App() {
     act({ type: 'RELEASE_PLAYER', deviceId });
     setMe(null);
   };
+  // Reinicia la partida de ESTA sala para todos (mismo código, se propaga por sync).
+  const newGame = () => {
+    if (confirm('¿Reiniciar la partida de esta sala? Se borra para todos los dispositivos.')) reset(false);
+  };
+  // Elimina la sala compartida: borra la fila en Supabase y todos salen a una sala nueva.
+  const deleteRoom = async () => {
+    if (!confirm('¿Eliminar esta sala para todos? No se puede deshacer.')) return;
+    const code = state.code;
+    setMe(null);
+    reset(true); // este dispositivo salta a una sala nueva (código nuevo)
+    if (supabase) {
+      const { error } = await supabase.from('Room').delete().eq('code', code);
+      if (error) alert('No se pudo eliminar en el servidor: ' + error.message);
+    }
+  };
 
   // ── Elegir identidad de este dispositivo ──
   const isViewer = meId === VIEWER;
@@ -177,7 +197,8 @@ export default function App() {
           <button onClick={() => setSheet({ kind: 'chart' })} title="Gráfico de patrimonio">📈</button>
           <button onClick={() => setSheet({ kind: 'settings' })} title="Ajustes">⚙️</button>
           <button onClick={share} title="Copiar enlace de invitación">Compartir</button>
-          {amAdmin && <button onClick={() => { if (confirm('¿Nueva partida? Se borra la actual.')) reset(); }}>Nueva</button>}
+          {amAdmin && <button onClick={newGame} title="Reiniciar la partida de esta sala (mismo código)">Nueva</button>}
+          {amAdmin && <button onClick={deleteRoom} title="Eliminar la sala para todos">🗑️</button>}
         </div>
       </header>
 
@@ -310,7 +331,7 @@ function SheetContent({
   }
 
   if (sheet.kind === 'board') {
-    return <BoardOverview state={state} close={close} />;
+    return <BoardOverview state={state} money={money} close={close} />;
   }
 
   if (sheet.kind === 'history') {
@@ -347,7 +368,23 @@ function SheetContent({
   }
 
   if (sheet.kind === 'props') {
-    return <PropsPanel me={me} act={act} money={money} readOnly={!mine} evenBuild={state.settings.evenBuild} goMarket={() => goMarket(me.id)} />;
+    // Pagar renta: solo el jugador en turno (o su admin) puede pagar renta a OTRO dueño.
+    const turnPlayer = state.players[state.turnIndex];
+    const canPayRent = !!turnPlayer && !turnPlayer.bankrupt && canControl(turnPlayer.id) && turnPlayer.id !== me.id;
+    const diceTotal = state.dice ? state.dice.a + state.dice.b : null;
+    return (
+      <PropsPanel
+        me={me}
+        act={act}
+        money={money}
+        readOnly={!mine}
+        evenBuild={state.settings.evenBuild}
+        goMarket={() => goMarket(me.id)}
+        onPayRent={canPayRent ? (propertyId) => { act({ type: 'PAY_RENT', fromId: turnPlayer.id, toId: me.id, propertyId }); close(); } : undefined}
+        payerName={turnPlayer?.name}
+        diceTotal={diceTotal}
+      />
+    );
   }
 
   if (sheet.kind === 'market') {
@@ -499,7 +536,7 @@ function PayForm({
 }
 
 function PropsPanel({
-  me, act, money, readOnly, evenBuild, goMarket,
+  me, act, money, readOnly, evenBuild, goMarket, onPayRent, payerName, diceTotal,
 }: {
   me: RuntimePlayer;
   act: ReturnType<typeof useGame>['act'];
@@ -507,10 +544,14 @@ function PropsPanel({
   readOnly?: boolean;
   evenBuild: boolean;
   goMarket: () => void;
+  onPayRent?: (propertyId: string) => void;
+  payerName?: string;
+  diceTotal?: number | null;
 }) {
   return (
     <div className="form">
       <h2>Propiedades de {me.name}{readOnly ? ' (solo lectura)' : ''}</h2>
+      {onPayRent && <p className="hint">💸 Como jugador en turno ({payerName}) puedes pagar la renta de una propiedad de {me.name}.</p>}
       <div className="wealth">
         <span>💵 {money(me.cash)}</span>
         <span>🏦 {money(playerEquity(me))} en bienes</span>
@@ -523,6 +564,16 @@ function PropsPanel({
           const prop = getProperty(h.propertyId)!;
           const buildable = canBuildOn({ cash: me.cash, holdings: me.holdings }, h.propertyId, evenBuild);
           const sellable = canSellOn({ cash: me.cash, holdings: me.holdings }, h.propertyId, evenBuild);
+          // Renta a pagar (auto y fija). Los servicios necesitan una tirada.
+          const activeRU = playerActiveRailUtil(me);
+          const needsDice = prop.kind === 'utility' && (diceTotal == null);
+          const rentAmount = h.mortgaged ? 0 : prop.rent({
+            houses: h.houses,
+            ownerHasFullGroup: ownsFullGroupActive(holdingsOf(me), prop.colorGroup),
+            railroadsOwned: activeRU.railroads,
+            utilitiesOwned: activeRU.utilities,
+            diceTotal: diceTotal ?? 0,
+          }, h.mortgaged);
           return (
             <div key={h.propertyId} className="owned">
               <PropertyCard
@@ -553,6 +604,16 @@ function PropsPanel({
                   </>
                 )}
               </div>}
+              {onPayRent && !h.mortgaged && (
+                <button
+                  className="b-payrent"
+                  disabled={needsDice}
+                  title={needsDice ? 'Tira los dados primero (renta del servicio depende de la tirada)' : ''}
+                  onClick={() => onPayRent(h.propertyId)}
+                >
+                  {needsDice ? '💸 Pagar renta (tira los dados)' : `💸 Pagar renta ${money(rentAmount)}`}
+                </button>
+              )}
             </div>
           );
         })}
@@ -826,43 +887,97 @@ function HistoryPanel({ log }: { log: LogEntry[] }) {
   );
 }
 
-function BoardOverview({ state, close }: {
+const GROUP_ORDER: (keyof typeof GROUPS)[] = ['railroad', 'utility', 'brown', 'lightblue', 'pink', 'orange', 'red', 'yellow', 'green', 'darkblue'];
+type BoardSort = 'board' | 'price' | 'group';
+type BoardOwn = { player: RuntimePlayer; mortgaged: boolean; houses: number };
+
+/** Resumen breve de renta para la fila del tablero (consciente de hipoteca). */
+function rentSummary(prop: Property, own: BoardOwn | undefined, money: (n: number) => string): string {
+  if (prop.kind === 'utility') {
+    const util = own ? playerActiveRailUtil(own.player).utilities : 1;
+    return `🎲×${util >= 2 ? 10 : 4}`;
+  }
+  if (own) {
+    const r = currentRentText(own.player, prop, own.houses);
+    return typeof r === 'number' ? money(r) : String(r);
+  }
+  return money(prop.def.rent[0]); // sin dueño: renta base
+}
+
+function BoardOverview({ state, money, close }: {
   state: GameState;
+  money: (n: number) => string;
   close: () => void;
 }) {
+  const [filter, setFilter] = useState<string>('all'); // 'all' | 'unsold' | playerId
+  const [sortBy, setSortBy] = useState<BoardSort>('board');
+
   // Dueño (y estado de hipoteca) por propiedad.
-  const ownerOf = new Map<string, { player: RuntimePlayer; mortgaged: boolean; houses: number }>();
+  const ownerOf = new Map<string, BoardOwn>();
   for (const p of state.players) {
     for (const h of p.holdings) ownerOf.set(h.propertyId, { player: p, mortgaged: h.mortgaged, houses: h.houses });
   }
-  const board = [...BOARD].sort((a, b) => a.def.boardIndex - b.def.boardIndex);
-  const sinVender = board.filter((p) => !ownerOf.has(p.id)).length;
-  const hipotecadas = board.filter((p) => ownerOf.get(p.id)?.mortgaged).length;
+  const sinVender = BOARD.filter((p) => !ownerOf.has(p.id)).length;
+  const hipotecadas = BOARD.filter((p) => ownerOf.get(p.id)?.mortgaged).length;
   const left = bankBuildingsLeft(state);
+
+  const sortFns: Record<BoardSort, (a: Property, b: Property) => number> = {
+    board: (a, b) => a.def.boardIndex - b.def.boardIndex,
+    price: (a, b) => a.price - b.price,
+    group: (a, b) => GROUP_ORDER.indexOf(a.colorGroup) - GROUP_ORDER.indexOf(b.colorGroup) || a.def.boardIndex - b.def.boardIndex,
+  };
+  const board = BOARD
+    .filter((p) => {
+      if (filter === 'all') return true;
+      if (filter === 'unsold') return !ownerOf.has(p.id);
+      return ownerOf.get(p.id)?.player.id === filter; // por jugador
+    })
+    .sort(sortFns[sortBy]);
 
   return (
     <div className="form">
-      <h2>🗺️ Tablero — todas las propiedades</h2>
+      <h2>🗺️ Tablero — propiedades</h2>
       <div className="boardsummary">
         <span>🏷️ Sin vender: <b>{sinVender}</b></span>
         <span>🏦 Hipotecadas: <b>{hipotecadas}</b></span>
         <span>🏠 Casas disp.: <b>{left.houses}</b></span>
         <span>🏨 Hoteles disp.: <b>{left.hotels}</b></span>
       </div>
+
+      <div className="chips">
+        <button className={filter === 'all' ? 'chip chip--on' : 'chip'} onClick={() => setFilter('all')}>Todas</button>
+        <button className={filter === 'unsold' ? 'chip chip--on' : 'chip'} onClick={() => setFilter('unsold')}>Sin vender</button>
+        {state.players.map((p) => (
+          <button key={p.id} className={filter === p.id ? 'chip chip--on' : 'chip'} onClick={() => setFilter(p.id)}>
+            {p.icon} {p.name}
+          </button>
+        ))}
+      </div>
+      <div className="chips">
+        <span className="hint" style={{ alignSelf: 'center' }}>Orden:</span>
+        <button className={sortBy === 'board' ? 'chip chip--on' : 'chip'} onClick={() => setSortBy('board')}>Tablero</button>
+        <button className={sortBy === 'price' ? 'chip chip--on' : 'chip'} onClick={() => setSortBy('price')}>Precio</button>
+        <button className={sortBy === 'group' ? 'chip chip--on' : 'chip'} onClick={() => setSortBy('group')}>Grupo</button>
+      </div>
+
       <ul className="boardlist">
+        {board.length === 0 && <p className="hint">Sin propiedades para este filtro.</p>}
         {board.map((prop) => {
           const own = ownerOf.get(prop.id);
           const g = GROUPS[prop.colorGroup].color;
           return (
             <li key={prop.id} className={`boardrow ${own?.mortgaged ? 'boardrow--mortgaged' : ''}`}>
               <span className="boardrow__band" style={{ background: g }} />
-              <span className="boardrow__name">{prop.def.emoji} {prop.name}</span>
+              <span className="boardrow__main">
+                <span className="boardrow__name">{prop.def.emoji} {prop.name}</span>
+                <span className="boardrow__meta">💰 {money(prop.price)} · 🏠 {rentSummary(prop, own, money)} · 🏦 {money(prop.mortgageValue)}</span>
+              </span>
               <span className="boardrow__owner">
                 {own ? (
                   <span style={{ color: PLAYER_COLOR(own.player.colorIndex) }}>
                     {own.player.icon} {own.player.name}
                     {own.houses > 0 && ` · ${own.houses >= 5 ? '🏨' : '🏠'.repeat(own.houses)}`}
-                    {own.mortgaged && ' · 🏦 hipotecada'}
+                    {own.mortgaged && ' · 🏦'}
                   </span>
                 ) : (
                   <span className="hint">sin dueño</span>

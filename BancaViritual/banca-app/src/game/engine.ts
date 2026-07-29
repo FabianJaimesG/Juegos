@@ -123,12 +123,22 @@ export type Action =
   | { type: 'REJECT_TRADE' }
   | { type: 'ROLL_DICE' }
   | { type: 'SET_SETTINGS'; patch: Partial<GameSettings> }
+  | { type: 'PAY_RENT'; fromId: string; toId: string; propertyId: string } // el jugador en turno paga renta al dueño
   | { type: 'NEXT_TURN' }
   | { type: 'REPLACE'; state: GameState }; // para sincronización (Realtime)
 
 // El jugador siempre ve ambos dados y la suma (puede elegir usar uno u otro o ambos).
-// La cara especial añade un efecto sorpresa.
-const SPECIAL_FACES = ['✖️ dobles', '🔁 relanza', '🚫 pierde turno', '➕6 bonus', '🏠 siguiente propiedad'];
+// La cara especial añade un efecto sorpresa; todas las caras tienen la misma probabilidad.
+const SPECIAL_FACES = [
+  '✖️ dobles (mueve el doble)',
+  '🔁 relanza',
+  '🚫 pierde turno',
+  '➕6 bonus',
+  '🏠 avanza a la siguiente propiedad',
+  '🎲 elige: un dado, el otro o ambos',
+];
+/** Prefijo que identifica la cara de "+6 bonus" (suma como un tercer dado). */
+const BONUS6 = '➕6';
 const d6 = () => Math.floor(Math.random() * 6) + 1;
 
 let counter = 0;
@@ -495,11 +505,45 @@ export function reducer(s: GameState, a: Action): GameState {
       return { ...s, pendingTrade: null, log: log(s, `${B?.name ?? 'Jugador'} rechazó la negociación`) };
     }
 
+    case 'PAY_RENT': {
+      const prop = getProperty(a.propertyId);
+      const from = s.players.find((x) => x.id === a.fromId);
+      const owner = s.players.find((x) => x.id === a.toId);
+      const h = owner?.holdings.find((x) => x.propertyId === a.propertyId);
+      if (!prop || !from || !owner || !h || from.id === owner.id || h.mortgaged) return s;
+      // Los servicios requieren una tirada (renta = dados × multiplicador).
+      if (prop.kind === 'utility' && !s.dice) return s;
+      const diceTotal = s.dice ? s.dice.a + s.dice.b : 0;
+      const oh = holdingsOf(owner);
+      const active = activeCountByKind(oh);
+      const rent = prop.rent(
+        {
+          houses: h.houses,
+          ownerHasFullGroup: ownsFullGroupActive(oh, prop.colorGroup),
+          railroadsOwned: active.railroads,
+          utilitiesOwned: active.utilities,
+          diceTotal,
+        },
+        h.mortgaged,
+      );
+      if (rent <= 0 || from.cash - rent < MIN_CASH) return s;
+      const players = s.players.map((x) => {
+        if (x.id === from.id) return { ...x, cash: x.cash - rent };
+        if (x.id === owner.id) return { ...x, cash: x.cash + rent };
+        return x;
+      });
+      return { ...s, players, log: log(s, `${from.name} pagó renta de ${prop.name} a ${owner.name} (${rent})`) };
+    }
+
     case 'ROLL_DICE': {
       const a = d6();
       const b = d6();
       const special = s.settings.special ? SPECIAL_FACES[Math.floor(Math.random() * SPECIAL_FACES.length)] : null;
-      const txt = `🎲 ${a} + ${b} = ${a + b}${special ? ` · ${special}` : ''}`;
+      // "+6 bonus" cuenta como un tercer dado: la suma total incluye los 6.
+      const bonus = special?.startsWith(BONUS6);
+      const txt = bonus
+        ? `🎲 ${a} + ${b} + 6 = ${a + b + 6} · ${special}`
+        : `🎲 ${a} + ${b} = ${a + b}${special ? ` · ${special}` : ''}`;
       return { ...s, dice: { a, b, special }, log: log(s, txt) };
     }
 

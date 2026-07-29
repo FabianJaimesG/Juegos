@@ -218,7 +218,13 @@
 .boardsummary { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem 0.8rem; margin-bottom: 0.6rem; font-size: 0.9rem; }
 .boardlist { list-style: none; padding: 0; margin: 0; max-height: 62vh; overflow-y: auto; }
 .boardrow { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
-.boardrow__band { width: 8px; height: 1.4rem; border-radius: 3px; flex: 0 0 auto; }
-.boardrow__name { flex: 1 1 auto; min-width: 0; }
-.boardrow__owner { flex: 0 0 auto; text-align: right; font-weight: 600; }
+.boardrow__band { width: 8px; align-self: stretch; min-height: 1.4rem; border-radius: 3px; flex: 0 0 auto; }
+.boardrow__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.boardrow__name { font-weight: 600; }
+.boardrow__meta { color: var(--muted); font-size: 0.78rem; }
+.boardrow__owner { flex: 0 0 auto; text-align: right; font-weight: 600; font-size: 0.85rem; }
 .boardrow--mortgaged { opacity: 0.65; }
+
+/* Pagar renta */
+.b-payrent { width: 100%; margin-top: 0.4rem; background: #b45309; color: #fff; border: 0; border-radius: 8px; padding: 0.5rem; cursor: pointer; font-size: 0.85rem; }
+.b-payrent:disabled { background: #cbd5e1; color: #64748b; cursor: not-allowed; }

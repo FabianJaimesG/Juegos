@@ -26,11 +26,14 @@ export function useRealtimeSync(
   code: string,
   state: GameState,
   applyRemote: (s: GameState) => void,
+  onDeleted?: () => void,
 ) {
   const origin = useRef(deviceOrigin());
   const lastRemote = useRef<string>(''); // último JSON venido/enviado (anti-eco)
   const applyRef = useRef(applyRemote);
   applyRef.current = applyRemote;
+  const deletedRef = useRef(onDeleted);
+  deletedRef.current = onDeleted;
 
   // Suscripción + recuperación inicial cuando cambia la sala.
   useEffect(() => {
@@ -56,6 +59,12 @@ export function useRealtimeSync(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'Room', filter: `code=eq.${code}` },
         (payload) => {
+          // La sala fue eliminada por alguien: avisar para salir a un estado limpio.
+          if (payload.eventType === 'DELETE') {
+            lastRemote.current = '';
+            deletedRef.current?.();
+            return;
+          }
           const row = payload.new as { state?: GameState; origin?: string } | null;
           if (!row?.state || row.origin === origin.current) return;
           const js = JSON.stringify(row.state);

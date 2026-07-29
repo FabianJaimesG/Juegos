@@ -62,11 +62,19 @@ export function useGame() {
     dispatch({ type: 'REPLACE', state: next });
   }, [state]);
 
-  const reset = useCallback(() => {
-    past.current = [];
-    future.current = [];
-    dispatch({ type: 'REPLACE', state: createGame(genCode()) });
-  }, []);
+  /**
+   * Reinicia la partida. Por defecto CONSERVA el código de sala (para propagar el
+   * reinicio a todos los dispositivos de esa sala); con `newCode` genera una sala
+   * nueva (p. ej. tras eliminar la sala compartida).
+   */
+  const reset = useCallback(
+    (newCode = false) => {
+      past.current = [];
+      future.current = [];
+      dispatch({ type: 'REPLACE', state: createGame(newCode ? genCode() : state.code) });
+    },
+    [state.code],
+  );
 
   return {
     state,
