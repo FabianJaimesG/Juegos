@@ -103,7 +103,7 @@ export const PACKS: Record<string, PackDef> = {
   'parada-libre': {
     label: 'Parada Libre',
     emoji: '🅿️',
-    desc: 'Bote acumulado, limusina dorada y un mazo propio de bonificaciones. Cada jugador empieza con 2 fichas de giro y 2 de bonificación.',
+    desc: 'Bote acumulado, limusina dorada y ruleta. Cada jugador empieza con 2 fichas de giro y 2 cartas de Bonificación en la mano, que usa cuando quiera.',
     color: '#0e7490',
   },
   'todo-venta': {

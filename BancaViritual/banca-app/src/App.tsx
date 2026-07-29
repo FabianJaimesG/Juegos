@@ -43,7 +43,8 @@ type Sheet =
   | { kind: 'chart' }
   | { kind: 'board' }
   | { kind: 'history' }
-  | { kind: 'hand'; playerId: string };
+  | { kind: 'hand'; playerId: string }
+  | { kind: 'forceswap'; playerId: string };
 
 const PLAYER_COLOR = (i: number) => PLAYER_COLORS[i % PLAYER_COLORS.length];
 
@@ -239,28 +240,22 @@ export default function App() {
           <span className="turnbar__who">Turno: <b>{turnPlayer.icon} {turnPlayer.name}</b>{myTurn && ' (tú)'}</span>
           {state.settings.dice && <DiceView dice={state.dice} onRoll={() => act({ type: 'ROLL_DICE' })} canRoll={myTurn} />}
           <span className="turnbar__decks">
-            {activeDecks(state.settings.cardPacks).map((d) => {
-              // El mazo de Bonificación se paga con una ficha del jugador en turno.
-              const needsToken = d === 'bonificacion';
-              const hasToken = !needsToken || turnPlayer.bonus > 0;
-              return (
+            {activeDecks(state.settings.cardPacks)
+              // Bonificación no se roba en el turno: se reparte al empezar, al
+              // girar la ruleta o al caer en la casilla, y va directo a la mano.
+              .filter((d) => d !== 'bonificacion')
+              .map((d) => (
                 <button
                   key={d}
                   className="deckbtn"
                   style={{ ['--deck-color' as string]: DECKS[d].color }}
-                  disabled={!myTurn || !!state.drawnCard || deckLeft(state, d) === 0 || !hasToken}
-                  title={needsToken
-                    ? `${DECKS[d].label} — cuesta 1 ficha (tienes ${turnPlayer.bonus})`
-                    : `${DECKS[d].label} — ${deckLeft(state, d)} cartas`}
-                  onClick={() => {
-                    if (needsToken) act({ type: 'SPEND_TOKEN', playerId: turnPlayer.id, token: 'bonus' });
-                    act({ type: 'DRAW_CARD', deck: d, playerId: turnPlayer.id });
-                  }}
+                  disabled={!myTurn || !!state.drawnCard || deckLeft(state, d) === 0}
+                  title={`${DECKS[d].label} — ${deckLeft(state, d)} cartas`}
+                  onClick={() => act({ type: 'DRAW_CARD', deck: d, playerId: turnPlayer.id })}
                 >
-                  {DECKS[d].emoji} <small>{needsToken ? turnPlayer.bonus : deckLeft(state, d)}</small>
+                  {DECKS[d].emoji} <small>{deckLeft(state, d)}</small>
                 </button>
-              );
-            })}
+              ))}
           </span>
           <span className="turnbar__btns">
             <button onClick={() => act({ type: 'NEXT_TURN' })} disabled={!myTurn} title={myTurn ? '' : 'Solo el jugador en turno puede pasar'}>
@@ -346,6 +341,7 @@ export default function App() {
               canEditRules={canEditRules}
               close={() => setSheet({ kind: 'none' })}
               goMarket={(playerId) => setSheet({ kind: 'market', playerId })}
+              goForceSwap={(playerId) => setSheet({ kind: 'forceswap', playerId })}
             />
           </div>
         </div>
@@ -389,7 +385,6 @@ function PlayerTile({
         <span title="Propiedades">🏷️ {p.holdings.length}</span>
         <span title="Casas / Hoteles">🏠 {b.houses} · 🏨 {b.hotels}</span>
         {p.spins > 0 && <span title="Fichas para girar la ruleta">🎡 {p.spins}</span>}
-        {p.bonus > 0 && <span title="Fichas para robar del mazo de Bonificación">⭐ {p.bonus}</span>}
       </div>
       {p.jail > 0 && (
         <div className="ptile__jail">
@@ -433,7 +428,7 @@ function PlayerTile({
 }
 
 function SheetContent({
-  sheet, state, act, money, history, canControl, canEditRules, close, goMarket,
+  sheet, state, act, money, history, canControl, canEditRules, close, goMarket, goForceSwap,
 }: {
   sheet: Sheet;
   state: ReturnType<typeof useGame>['state'];
@@ -444,6 +439,7 @@ function SheetContent({
   canEditRules: boolean;
   close: () => void;
   goMarket: (playerId: string) => void;
+  goForceSwap: (playerId: string) => void;
 }) {
   if (sheet.kind === 'none') return null;
 
@@ -473,6 +469,11 @@ function SheetContent({
   const me = state.players.find((p) => p.id === sheet.playerId);
   if (!me) return null;
   const mine = canControl(me.id);
+
+  if (sheet.kind === 'forceswap') {
+    const others = state.players.filter((p) => p.id !== me.id && !p.bankrupt);
+    return <ForceSwapPanel me={me} others={others} act={act} close={close} />;
+  }
 
   if (sheet.kind === 'hand') {
     return <HandPanel me={me} act={act} sym={state.currencySymbol} readOnly={!mine} close={close} />;
@@ -505,6 +506,7 @@ function SheetContent({
         readOnly={!mine}
         evenBuild={state.settings.evenBuild}
         goMarket={() => goMarket(me.id)}
+        goForceSwap={() => goForceSwap(me.id)}
         onPayRent={canPayRent ? (propertyId) => { act({ type: 'PAY_RENT', fromId: turnPlayer.id, toId: me.id, propertyId }); close(); } : undefined}
         payerName={turnPlayer?.name}
         diceTotal={diceTotal}
@@ -661,7 +663,7 @@ function PayForm({
 }
 
 function PropsPanel({
-  me, act, money, readOnly, evenBuild, goMarket, onPayRent, payerName, diceTotal,
+  me, act, money, readOnly, evenBuild, goMarket, goForceSwap, onPayRent, payerName, diceTotal,
 }: {
   me: RuntimePlayer;
   act: ReturnType<typeof useGame>['act'];
@@ -669,6 +671,7 @@ function PropsPanel({
   readOnly?: boolean;
   evenBuild: boolean;
   goMarket: () => void;
+  goForceSwap: () => void;
   onPayRent?: (propertyId: string) => void;
   payerName?: string;
   diceTotal?: number | null;
@@ -684,6 +687,12 @@ function PropsPanel({
       </div>
       {!readOnly && me.freeHouses > 0 && (
         <p className="perk">🏠 Tienes <b>{me.freeHouses}</b> casa{me.freeHouses > 1 ? 's' : ''} gratis: elige abajo dónde colocarla{me.freeHouses > 1 ? 's' : ''}.</p>
+      )}
+      {!readOnly && me.forceSwaps > 0 && (
+        <p className="perk">
+          🔀 Tienes <b>{me.forceSwaps}</b> intercambio{me.forceSwaps > 1 ? 's' : ''} forzoso{me.forceSwaps > 1 ? 's' : ''}:
+          <button className="perk__btn" onClick={goForceSwap}>elegir propiedades</button>
+        </p>
       )}
       {!readOnly && me.freeProps > 0 && (
         <p className="perk">🎁 Tienes <b>{me.freeProps}</b> propiedad{me.freeProps > 1 ? 'es' : ''} gratis: tómala en 🛒 Comprar propiedad.</p>
@@ -867,6 +876,82 @@ function HandPanel({ me, act, sym, readOnly, close }: {
   );
 }
 
+/**
+ * Intercambio forzoso: misma mecánica de elegir propiedades que una
+ * negociación, pero sin dinero y sin que la otra parte tenga que aceptar.
+ * Lo habilita la carta 🔀 de Bonificación.
+ */
+function ForceSwapPanel({ me, others, act, close }: {
+  me: RuntimePlayer;
+  others: RuntimePlayer[];
+  act: ReturnType<typeof useGame>['act'];
+  close: () => void;
+}) {
+  const [otherId, setOtherId] = useState<string>(others[0]?.id ?? '');
+  const [mine, setMine] = useState<string>('');
+  const [theirs, setTheirs] = useState<string>('');
+  const other = others.find((p) => p.id === otherId);
+
+  if (!other) return <div className="form"><h2>🔀 Intercambio forzoso</h2><p className="hint">No hay otros jugadores.</p></div>;
+
+  const swappable = (p: RuntimePlayer) => p.holdings.filter((h) => h.houses === 0);
+  const valid = !!mine && !!theirs;
+
+  const column = (p: RuntimePlayer, sel: string, setSel: (v: string) => void, label: string) => (
+    <div className="tradecol">
+      <h3>{label}: {p.icon} {p.name}</h3>
+      <div className="tradeprops">
+        {swappable(p).length === 0 && <p className="hint">Sin propiedades sin casas.</p>}
+        {swappable(p).map((h) => {
+          const prop = getProperty(h.propertyId)!;
+          return (
+            <div
+              key={h.propertyId}
+              className={sel === h.propertyId ? 'tradeprop tradeprop--on' : 'tradeprop'}
+              onClick={() => setSel(sel === h.propertyId ? '' : h.propertyId)}
+            >
+              <PropertyCard property={prop} mortgaged={h.mortgaged} compact />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="form">
+      <h2>🔀 Intercambio forzoso</h2>
+      <p className="hint">
+        Elige <b>tú</b> qué propiedad das y cuál te llevas. No se negocia dinero y
+        <b> el otro jugador no tiene que aceptar</b>. Solo propiedades sin casas.
+      </p>
+      {others.length > 1 && (
+        <div className="chips">
+          {others.map((o) => (
+            <button key={o.id} className={o.id === otherId ? 'chip chip--on' : 'chip'} onClick={() => { setOtherId(o.id); setTheirs(''); }}>
+              {o.icon} {o.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="tradegrid">
+        {column(me, mine, setMine, 'Das')}
+        {column(other, theirs, setTheirs, 'Te llevas')}
+      </div>
+      <button
+        className="confirm"
+        disabled={!valid}
+        onClick={() => {
+          act({ type: 'FORCE_SWAP', aId: me.id, bId: other.id, aProp: mine, bProp: theirs });
+          close();
+        }}
+      >
+        {valid ? `Forzar el cambio con ${other.name}` : 'Elige una propiedad de cada lado'}
+      </button>
+    </div>
+  );
+}
+
 function TradePanel({
   me, others, act, money, close, sym,
 }: {
@@ -887,8 +972,6 @@ function TradePanel({
   const [bCards, setBCards] = useState<number[]>([]);
   const [aSpins, setASpins] = useState(0);
   const [bSpins, setBSpins] = useState(0);
-  const [aBonus, setABonus] = useState(0);
-  const [bBonus, setBBonus] = useState(0);
   const other = others.find((p) => p.id === otherId);
 
   if (!other) return <div className="form"><h2>Negociar</h2><p className="hint">No hay otros jugadores.</p></div>;
@@ -904,11 +987,10 @@ function TradePanel({
   const nothing =
     nA === 0 && nB === 0 && aProps.length === 0 && bProps.length === 0 &&
     aCardIds.length === 0 && bCardIds.length === 0 &&
-    aSpins === 0 && bSpins === 0 && aBonus === 0 && bBonus === 0;
+    aSpins === 0 && bSpins === 0;
   const valid =
     !nothing && me.cash >= nA && other.cash >= nB &&
-    me.spins >= aSpins && other.spins >= bSpins &&
-    me.bonus >= aBonus && other.bonus >= bBonus;
+    me.spins >= aSpins && other.spins >= bSpins;
 
   const toggleIdx = (list: number[], set: (v: number[]) => void, i: number) =>
     set(list.includes(i) ? list.filter((x) => x !== i) : [...list, i]);
@@ -933,8 +1015,6 @@ function TradePanel({
     setCardSel: (v: number[]) => void,
     spins: number,
     setSpins: (n: number) => void,
-    bonus: number,
-    setBonus: (n: number) => void,
   ) => (
     <div className="tradecol">
       <h3>{p.icon} {p.name}</h3>
@@ -963,7 +1043,6 @@ function TradePanel({
         </div>
       )}
       {tokenRow('fichas de giro', '🎡', p.spins, spins, setSpins)}
-      {tokenRow('de bonificación', '⭐', p.bonus, bonus, setBonus)}
       <div className="tradeprops">
         {tradeable(p).length === 0 && <p className="hint">Sin propiedades negociables.</p>}
         {tradeable(p).map((h) => {
@@ -993,8 +1072,8 @@ function TradePanel({
       )}
       <p className="hint">Las propiedades con casas no aparecen. Las hipotecadas se transfieren tal cual (el nuevo dueño las deshipoteca después). También puedes intercambiar cartas guardadas 🃏 y fichas 🎡⭐.</p>
       <div className="tradegrid">
-        {column(me, aCash, setACash, aProps, setAProps, aCards, setACards, aSpins, setASpins, aBonus, setABonus)}
-        {column(other, bCash, setBCash, bProps, setBProps, bCards, setBCards, bSpins, setBSpins, bBonus, setBBonus)}
+        {column(me, aCash, setACash, aProps, setAProps, aCards, setACards, aSpins, setASpins)}
+        {column(other, bCash, setBCash, bProps, setBProps, bCards, setBCards, bSpins, setBSpins)}
       </div>
       <button
         className="confirm"
@@ -1004,7 +1083,7 @@ function TradePanel({
             type: 'PROPOSE_TRADE',
             trade: {
               aId: me.id, bId: other.id, aCash: nA, bCash: nB, aProps, bProps,
-              aCards: aCardIds, bCards: bCardIds, aSpins, bSpins, aBonus, bBonus,
+              aCards: aCardIds, bCards: bCardIds, aSpins, bSpins,
             },
           });
           close();
@@ -1368,13 +1447,12 @@ function PendingTradeBanner({ trade, players, act, money, canRespond }: {
   const A = players.find((p) => p.id === trade.aId);
   const B = players.find((p) => p.id === trade.bId);
   const nm = (ids: string[]) => ids.map((id) => getProperty(id)?.name ?? id).join(', ');
-  const side = (cash: number, props: string[], cards: string[] = [], spins = 0, bonus = 0) => {
+  const side = (cash: number, props: string[], cards: string[] = [], spins = 0) => {
     const parts = [
       cash ? money(cash) : '',
       props.length ? nm(props) : '',
       cards.length ? cards.map((id) => getCard(id)?.emoji ?? '🃏').join('') : '',
       spins ? `${spins}🎡` : '',
-      bonus ? `${bonus}⭐` : '',
     ].filter(Boolean);
     return parts.length ? parts.join(' + ') : 'nada';
   };
@@ -1382,8 +1460,8 @@ function PendingTradeBanner({ trade, players, act, money, canRespond }: {
     <div className="tradebanner">
       <h3>🤝 Negociación en proceso</h3>
       <div className="tradebanner__detail">
-        <b>{A?.icon} {A?.name}</b> ofrece: {side(trade.aCash, trade.aProps, trade.aCards, trade.aSpins, trade.aBonus)}<br />
-        <b>{B?.icon} {B?.name}</b> ofrece: {side(trade.bCash, trade.bProps, trade.bCards, trade.bSpins, trade.bBonus)}
+        <b>{A?.icon} {A?.name}</b> ofrece: {side(trade.aCash, trade.aProps, trade.aCards, trade.aSpins)}<br />
+        <b>{B?.icon} {B?.name}</b> ofrece: {side(trade.bCash, trade.bProps, trade.bCards, trade.bSpins)}
       </div>
       {canRespond ? (
         <div className="tradebanner__btns">

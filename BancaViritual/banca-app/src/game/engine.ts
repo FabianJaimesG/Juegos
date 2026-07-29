@@ -28,14 +28,14 @@ export interface RuntimePlayer {
   tokens: string[];
   /** Parada Libre: fichas para girar la ruleta. */
   spins: number;
-  /** Parada Libre: fichas para robar del mazo de Bonificación. */
-  bonus: number;
   /** Prisión: turnos que lleva encerrado. 0 = libre. */
   jail: number;
   /** Casas gratis pendientes de colocar (carta o ruleta). */
   freeHouses: number;
   /** Propiedades gratis pendientes de tomar (carta o ruleta). */
   freeProps: number;
+  /** Intercambios forzosos pendientes de ejecutar. */
+  forceSwaps: number;
   /** Administrador: su dispositivo puede operar a todos los jugadores. */
   admin: boolean;
   /** Id del dispositivo que "reclamó" a este jugador (para no robar identidades). */
@@ -100,8 +100,6 @@ export interface PendingTrade {
   /** Fichas de Parada Libre que entrega cada lado. */
   aSpins?: number;
   bSpins?: number;
-  aBonus?: number;
-  bBonus?: number;
 }
 
 export interface GameState {
@@ -164,10 +162,10 @@ export function hydrate(s: GameState): GameState {
       admin: p.admin ?? false,
       tokens: p.tokens ?? [],
       spins: p.spins ?? 0,
-      bonus: p.bonus ?? 0,
       jail: p.jail ?? 0,
       freeHouses: p.freeHouses ?? 0,
       freeProps: p.freeProps ?? 0,
+      forceSwaps: p.forceSwaps ?? 0,
     })),
   };
 }
@@ -203,7 +201,8 @@ export type Action =
   | { type: 'POT_ADD'; amount: number; playerId?: string } // al bote de Parada Libre
   | { type: 'POT_TAKE'; playerId: string; share?: number } // cobrar el bote
   | { type: 'SET_LIMO'; playerId: string | null } // asignar/quitar la limusina dorada
-  | { type: 'SPEND_TOKEN'; playerId: string; token: 'spins' | 'bonus'; delta?: number }
+  | { type: 'SPEND_TOKEN'; playerId: string; token: 'spins'; delta?: number }
+  | { type: 'FORCE_SWAP'; aId: string; bId: string; aProp: string; bProp: string }
   | { type: 'SPIN_WHEEL'; playerId: string } // gasta una ficha y gira la ruleta
   | { type: 'CLOSE_WHEEL' }
   | { type: 'RENT_TO_SPIN'; ownerId: string } // perdonas la renta y cobras una ficha de giro
@@ -211,7 +210,7 @@ export type Action =
   | { type: 'GO_TO_JAIL'; playerId: string }
   | { type: 'PAY_BAIL'; playerId: string } // paga la fianza y sale
   | { type: 'LEAVE_JAIL'; playerId: string; reason?: string } // sale gratis (dobles, carta, indulto)
-  | { type: 'GRANT_PERK'; playerId: string; perk: 'freeHouses' | 'freeProps'; delta?: number }
+  | { type: 'GRANT_PERK'; playerId: string; perk: 'freeHouses' | 'freeProps' | 'forceSwaps'; delta?: number }
   | { type: 'SET_SETTINGS'; patch: Partial<GameSettings> }
   | { type: 'PAY_RENT'; fromId: string; toId: string; propertyId: string } // el jugador en turno paga renta al dueño
   | { type: 'NEXT_TURN' }
@@ -273,10 +272,36 @@ function buildDecks(packs: string[]): Record<DeckId, DeckState> {
   return decks;
 }
 
-/** Fichas iniciales que reparte cada modalidad al empezar. */
-const STARTING_TOKENS: Record<string, { spins: number; bonus: number }> = {
-  'parada-libre': { spins: 2, bonus: 2 },
+/** Con qué empieza cada jugador según la modalidad: fichas de giro y cartas en mano. */
+const STARTING_TOKENS: Record<string, { spins: number; cards: number }> = {
+  'parada-libre': { spins: 2, cards: 2 },
 };
+
+/**
+ * Saca `n` cartas del mazo indicado y las pone en la mano del jugador.
+ * Rebaraja el descarte si el mazo se agota. Se usa para las cartas de
+ * Bonificación, que no se roban en el turno: se tienen y se usan cuando el
+ * jugador quiera.
+ */
+function dealToHand(s: GameState, playerId: string, deck: DeckId, n: number): GameState {
+  let d = s.decks[deck];
+  const dealt: string[] = [];
+  for (let i = 0; i < n; i++) {
+    if (d.draw.length === 0) {
+      if (d.discard.length === 0) break;
+      d = { draw: shuffle(d.discard), discard: [] };
+    }
+    const [card, ...rest] = d.draw;
+    dealt.push(card);
+    d = { ...d, draw: rest };
+  }
+  if (dealt.length === 0) return s;
+  return {
+    ...s,
+    decks: { ...s.decks, [deck]: d },
+    players: mapPlayer(s, playerId, (x) => ({ ...x, tokens: [...x.tokens, ...dealt] })),
+  };
+}
 
 /** Vista de tenencias de un jugador para los cálculos de patrimonio. */
 export function holdingsOf(p: RuntimePlayer): PlayerHoldings {
@@ -328,10 +353,8 @@ function executeTrade(players: RuntimePlayer[], t: PendingTrade): RuntimePlayer[
   const bCards = t.bCards ?? [];
   const aSpins = t.aSpins ?? 0;
   const bSpins = t.bSpins ?? 0;
-  const aBonus = t.aBonus ?? 0;
-  const bBonus = t.bBonus ?? 0;
-  if (aSpins < 0 || bSpins < 0 || aBonus < 0 || bBonus < 0) return null;
-  if (A.spins < aSpins || B.spins < bSpins || A.bonus < aBonus || B.bonus < bBonus) return null;
+  if (aSpins < 0 || bSpins < 0) return null;
+  if (A.spins < aSpins || B.spins < bSpins) return null;
   const takeCards = (owner: RuntimePlayer, wanted: string[]): string[] | null => {
     const rest = [...owner.tokens];
     for (const id of wanted) {
@@ -353,7 +376,6 @@ function executeTrade(players: RuntimePlayer[], t: PendingTrade): RuntimePlayer[
     holdings: [...A.holdings.filter((h) => !aSet.has(h.propertyId)), ...bGives],
     tokens: [...aRest, ...bCards],
     spins: A.spins - aSpins + bSpins,
-    bonus: A.bonus - aBonus + bBonus,
   };
   const newB: RuntimePlayer = {
     ...B,
@@ -361,7 +383,6 @@ function executeTrade(players: RuntimePlayer[], t: PendingTrade): RuntimePlayer[
     holdings: [...B.holdings.filter((h) => !bSet.has(h.propertyId)), ...aGives],
     tokens: [...bRest, ...aCards],
     spins: B.spins - bSpins + aSpins,
-    bonus: B.bonus - bBonus + aBonus,
   };
   return players.map((p) => (p.id === A.id ? newA : p.id === B.id ? newB : p));
 }
@@ -372,17 +393,16 @@ function tradeDetail(s: GameState, t: PendingTrade): string {
   const B = s.players.find((x) => x.id === t.bId);
   const nm = (ids: string[]) => ids.map((id) => getProperty(id)?.name ?? id).join(', ');
   const cn = (ids: string[]) => ids.map((id) => getCard(id)?.emoji ?? '🃏').join('');
-  const fichas = (spins?: number, bonus?: number) =>
-    [spins ? `${spins}🎡` : '', bonus ? `${bonus}⭐` : ''].filter(Boolean).join(' ');
+  const fichas = (spins?: number) => (spins ? `${spins}🎡` : '');
   const parts = [
     t.aProps.length ? `${A?.name} dio ${nm(t.aProps)}` : '',
     t.aCash ? `${A?.name} dio ${t.aCash}` : '',
     t.aCards?.length ? `${A?.name} dio ${cn(t.aCards)}` : '',
-    fichas(t.aSpins, t.aBonus) ? `${A?.name} dio ${fichas(t.aSpins, t.aBonus)}` : '',
+    fichas(t.aSpins) ? `${A?.name} dio ${fichas(t.aSpins)}` : '',
     t.bProps.length ? `${B?.name} dio ${nm(t.bProps)}` : '',
     t.bCash ? `${B?.name} dio ${t.bCash}` : '',
     t.bCards?.length ? `${B?.name} dio ${cn(t.bCards)}` : '',
-    fichas(t.bSpins, t.bBonus) ? `${B?.name} dio ${fichas(t.bSpins, t.bBonus)}` : '',
+    fichas(t.bSpins) ? `${B?.name} dio ${fichas(t.bSpins)}` : '',
   ].filter(Boolean);
   return parts.join(' · ');
 }
@@ -452,6 +472,8 @@ function actionFor(s: GameState, e: CardEffect, p: RuntimePlayer): Action | null
       return { type: 'GRANT_PERK', playerId: p.id, perk: 'freeHouses' };
     case 'free_property':
       return { type: 'GRANT_PERK', playerId: p.id, perk: 'freeProps' };
+    case 'force_swap':
+      return { type: 'GRANT_PERK', playerId: p.id, perk: 'forceSwaps' };
     case 'goto':
       return e.bonus ? { type: 'BANK_TO_PLAYER', playerId: p.id, amount: e.bonus } : null;
     default:
@@ -480,10 +502,10 @@ export function reducer(s: GameState, a: Action): GameState {
         holdings: [],
         tokens: [],
         spins: 0,
-        bonus: 0,
         jail: 0,
         freeHouses: 0,
         freeProps: 0,
+        forceSwaps: 0,
         admin: a.admin ?? false,
       };
       return { ...s, players: [...s.players, p], log: log(s, `Se unió ${p.name}`) };
@@ -498,9 +520,9 @@ export function reducer(s: GameState, a: Action): GameState {
       const start = s.settings.cardPacks.reduce(
         (acc, pack) => {
           const t = STARTING_TOKENS[pack];
-          return t ? { spins: acc.spins + t.spins, bonus: acc.bonus + t.bonus } : acc;
+          return t ? { spins: acc.spins + t.spins, cards: acc.cards + t.cards } : acc;
         },
-        { spins: 0, bonus: 0 },
+        { spins: 0, cards: 0 },
       );
       // Empezar es empezar de cero: dinero inicial y nada heredado de una
       // partida anterior (importante tras END_GAME, que conserva a los jugadores).
@@ -511,12 +533,12 @@ export function reducer(s: GameState, a: Action): GameState {
         bankrupt: false,
         tokens: [],
         spins: start.spins,
-        bonus: start.bonus,
         jail: 0,
         freeHouses: 0,
         freeProps: 0,
+        forceSwaps: 0,
       }));
-      return {
+      const fresh: GameState = {
         ...s,
         players,
         started: true,
@@ -528,6 +550,9 @@ export function reducer(s: GameState, a: Action): GameState {
         wheel: null,
         log: log(s, '¡Empieza la partida!'),
       };
+      // Las cartas de Bonificación se reparten de salida: cada jugador ya sabe
+      // cuáles tiene y decide en qué turno usarlas.
+      return players.reduce((acc, p) => dealToHand(acc, p.id, 'bonificacion', start.cards), fresh);
     }
 
     case 'END_GAME': {
@@ -763,7 +788,7 @@ export function reducer(s: GameState, a: Action): GameState {
       }
       return {
         ...s,
-        players: mapPlayer(s, a.playerId, (x) => ({ ...x, bankrupt: true, cash: 0, holdings: [], tokens: [], spins: 0, bonus: 0, freeHouses: 0, freeProps: 0 })),
+        players: mapPlayer(s, a.playerId, (x) => ({ ...x, bankrupt: true, cash: 0, holdings: [], tokens: [], spins: 0, freeHouses: 0, freeProps: 0, forceSwaps: 0 })),
         decks,
         limoPlayerId: s.limoPlayerId === p.id ? null : s.limoPlayerId,
         log: log(s, `${p.name} se declaró en bancarrota (sus propiedades vuelven al banco)`),
@@ -798,7 +823,7 @@ export function reducer(s: GameState, a: Action): GameState {
         t.aCash === 0 && t.bCash === 0 &&
         t.aProps.length === 0 && t.bProps.length === 0 &&
         !t.aCards?.length && !t.bCards?.length &&
-        !t.aSpins && !t.bSpins && !t.aBonus && !t.bBonus;
+        !t.aSpins && !t.bSpins;
       if (empty) return s;
       return {
         ...s,
@@ -993,12 +1018,12 @@ export function reducer(s: GameState, a: Action): GameState {
       if (!p || p.spins <= 0 || s.wheel) return s;
       const face = WHEEL[Math.floor(Math.random() * WHEEL.length)];
       // Gasta la ficha de giro y gana una de bonificación ("una tarjeta por giro").
-      const spun: GameState = {
+      const spun: GameState = dealToHand({
         ...s,
-        players: mapPlayer(s, p.id, (x) => ({ ...x, spins: x.spins - 1, bonus: x.bonus + 1 })),
+        players: mapPlayer(s, p.id, (x) => ({ ...x, spins: x.spins - 1 })),
         wheel: { faceId: face.id, playerId: p.id },
-        log: log(s, `🎡 ${p.name} giró la ruleta: ${wheelText(face, s.currencySymbol)}`),
-      };
+        log: log(s, `🎡 ${p.name} giró la ruleta: ${wheelText(face, s.currencySymbol)} (+1 carta ⭐)`),
+      }, p.id, 'bonificacion', 1);
       const effect = actionFor(spun, face.effect, spun.players.find((x) => x.id === p.id)!);
       return effect ? reducer(spun, effect) : spun;
     }
@@ -1024,7 +1049,9 @@ export function reducer(s: GameState, a: Action): GameState {
       const p = s.players.find((x) => x.id === a.playerId);
       const delta = a.delta ?? 1;
       if (!p || p[a.perk] + delta < 0) return s;
-      const what = a.perk === 'freeHouses' ? '🏠 casa gratis' : '🎁 propiedad gratis';
+      const what = a.perk === 'freeHouses' ? '🏠 casa gratis'
+        : a.perk === 'freeProps' ? '🎁 propiedad gratis'
+        : '🔀 intercambio forzoso';
       return {
         ...s,
         players: mapPlayer(s, p.id, (x) => ({ ...x, [a.perk]: x[a.perk] + delta })),
@@ -1071,14 +1098,41 @@ export function reducer(s: GameState, a: Action): GameState {
       if (!p) return s;
       // La casilla entrega: el Gran Premio, la limusina y una tarjeta de Bonificación.
       const amount = s.pot;
-      return {
+      return dealToHand({
         ...s,
-        players: mapPlayer(s, p.id, (x) => ({
-          ...x, cash: x.cash + amount, bonus: x.bonus + 1, spins: x.spins + 1,
-        })),
+        players: mapPlayer(s, p.id, (x) => ({ ...x, cash: x.cash + amount, spins: x.spins + 1 })),
         pot: 0,
         limoPlayerId: p.id,
-        log: log(s, `🅿️ ${p.name} cayó en la Parada Libre: +${amount}, la limusina 🚗, una tarjeta ⭐ y un giro 🎡`),
+        log: log(s, `🅿️ ${p.name} cayó en la Parada Libre: +${amount}, la limusina 🚗, una carta ⭐ y un giro 🎡`),
+      }, p.id, 'bonificacion', 1);
+    }
+
+    case 'FORCE_SWAP': {
+      const A = s.players.find((x) => x.id === a.aId);
+      const B = s.players.find((x) => x.id === a.bId);
+      if (!A || !B || A.id === B.id || A.forceSwaps <= 0) return s;
+      const ha = A.holdings.find((h) => h.propertyId === a.aProp);
+      const hb = B.holdings.find((h) => h.propertyId === a.bProp);
+      // Como en cualquier traspaso: nada con casas encima.
+      if (!ha || !hb || ha.houses > 0 || hb.houses > 0) return s;
+      const pa = getProperty(a.aProp);
+      const pb = getProperty(a.bProp);
+      return {
+        ...s,
+        players: s.players.map((x) => {
+          if (x.id === A.id) {
+            return {
+              ...x,
+              forceSwaps: x.forceSwaps - 1,
+              holdings: [...x.holdings.filter((h) => h.propertyId !== a.aProp), hb],
+            };
+          }
+          if (x.id === B.id) {
+            return { ...x, holdings: [...x.holdings.filter((h) => h.propertyId !== a.bProp), ha] };
+          }
+          return x;
+        }),
+        log: log(s, `🔀 ${A.name} forzó un cambio con ${B.name}: ${pa?.name} ↔ ${pb?.name}`),
       };
     }
 

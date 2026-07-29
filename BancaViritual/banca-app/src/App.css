@@ -472,3 +472,8 @@
   padding: 0.5rem 0.6rem; margin: 0.4rem 0; font-size: 0.85rem;
 }
 .owned__free { background: #eab308 !important; color: #422006 !important; font-weight: 700; }
+
+.perk__btn {
+  margin-left: 0.4rem; background: #166534; color: #fff; border: 0;
+  border-radius: 6px; padding: 0.2rem 0.5rem; cursor: pointer; font-size: 0.8rem;
+}

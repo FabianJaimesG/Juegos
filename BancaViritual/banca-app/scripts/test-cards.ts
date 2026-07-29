@@ -167,8 +167,10 @@ let gPL = createGame('PL');
 gPL = { ...gPL, settings: { ...gPL.settings, cardPacks: packs } };
 gPL = run(gPL, { type: 'ADD_PLAYER', name: 'Ana' }, { type: 'ADD_PLAYER', name: 'Beto' }, { type: 'START_GAME' });
 const [pa, pb] = gPL.players.map((p) => p.id);
-ok(gPL.decks.bonificacion.draw.length === 24, 'el mazo se baraja al empezar');
-ok(gPL.players.every((p) => p.spins === 2 && p.bonus === 2), 'cada jugador recibe 2 fichas de giro y 2 de bonificación');
+ok(gPL.decks.bonificacion.draw.length === 24 - 2 * gPL.players.length, 'el mazo se baraja y se reparte al empezar');
+ok(gPL.players.every((p) => p.spins === 2), 'cada jugador recibe 2 fichas de giro');
+ok(gPL.players.every((p) => p.tokens.length === 2), 'y 2 cartas de Bonificación repartidas en la mano');
+ok(gPL.decks.bonificacion.draw.length === 24 - 2 * gPL.players.length, 'que salen del mazo');
 ok(gPL.pot === 0 && gPL.limoPlayerId === null, 'bote vacío y sin limusina al empezar');
 
 console.log('12) El bote');
@@ -205,11 +207,12 @@ ok(gCasa.players.find((p) => p.id === pa)!.holdings[0].houses === 1, 'con la car
 ok(cashOf(gCasa, pa) === cashAntes, 'y no cuesta nada');
 
 console.log('15) Cartas que se guardan (comportamiento general)');
+const manoInicial = gPL.players.find((p) => p.id === pa)!.tokens.length;
 let gKeep = run(stack(gPL, 'par-sin-renta'), { type: 'DRAW_CARD', deck: 'bonificacion', playerId: pa }, { type: 'RESOLVE_CARD' });
-ok(gKeep.players.find((p) => p.id === pa)!.tokens.length === 1, 'la carta de exención se guarda en la mano');
+ok(gKeep.players.find((p) => p.id === pa)!.tokens.length === manoInicial + 1, 'la carta de exención se guarda en la mano');
 ok(gKeep.decks.bonificacion.discard.length === 0, 'no se descarta mientras se conserva');
 gKeep = reducer(gKeep, { type: 'USE_CARD', playerId: pa, cardId: 'par-sin-renta' });
-ok(gKeep.players.find((p) => p.id === pa)!.tokens.length === 0, 'al usarla sale de la mano');
+ok(gKeep.players.find((p) => p.id === pa)!.tokens.length === manoInicial, 'al usarla sale de la mano');
 ok(gKeep.decks.bonificacion.discard[0] === 'par-sin-renta', 'y vuelve al descarte para volver a salir');
 // Con dos copias iguales en mano se gasta solo una.
 const dos = { ...gPL, players: gPL.players.map((p) => (p.id === pa ? { ...p, tokens: ['par-sin-renta', 'par-sin-renta'] } : p)) };
@@ -219,11 +222,11 @@ ok(CARDS.filter((c) => c.keep).length === 3 + cardsFor('bonificacion', ['parada-
   'se conservan las 3 de cárcel/indulto más todas las de Bonificación');
 
 console.log('16) Fichas');
-const gGasta = reducer(gPL, { type: 'SPEND_TOKEN', playerId: pa, token: 'bonus' });
-ok(gGasta.players.find((p) => p.id === pa)!.bonus === 1, 'gastar una ficha de bonificación');
-const gSin = reducer({ ...gPL, players: gPL.players.map((p) => ({ ...p, bonus: 0 })) },
-  { type: 'SPEND_TOKEN', playerId: pa, token: 'bonus' });
-ok(gSin.players.find((p) => p.id === pa)!.bonus === 0, 'no se puede gastar de más');
+const gGasta = reducer(gPL, { type: 'SPEND_TOKEN', playerId: pa, token: 'spins' });
+ok(gGasta.players.find((p) => p.id === pa)!.spins === 1, 'gastar una ficha de giro');
+const gSin = reducer({ ...gPL, players: gPL.players.map((p) => ({ ...p, spins: 0 })) },
+  { type: 'SPEND_TOKEN', playerId: pa, token: 'spins' });
+ok(gSin.players.find((p) => p.id === pa)!.spins === 0, 'no se puede gastar de más');
 
 console.log('17) La ruleta');
 ok(WHEEL.length === 8, 'la ruleta tiene 8 sectores');
@@ -242,7 +245,7 @@ const spinTo = (st: GameState, playerId: string, faceId: string): GameState => {
 let gW = spinTo(gPL, pa, 'w-100');
 const anaW = gW.players.find((p) => p.id === pa)!;
 ok(anaW.spins === 1, 'girar gasta una ficha de giro');
-ok(anaW.bonus === 3, 'y entrega una tarjeta de Bonificación');
+ok(anaW.tokens.length === 3, 'y entrega una carta de Bonificación a la mano');
 ok(gW.pot === 100 && cashOf(gW, pa) === 1400, 'el castigo va al bote, no al banco');
 ok(gW.wheel?.faceId === 'w-100', 'la cara queda en pantalla hasta cerrarla');
 ok(reducer(gW, { type: 'CLOSE_WHEEL' }).wheel === null, 'se cierra');
@@ -283,20 +286,20 @@ const gLand = reducer({ ...gPL, pot: 350 }, { type: 'LAND_FREE_PARKING', playerI
 const betoL = gLand.players.find((p) => p.id === pb)!;
 ok(gLand.pot === 0 && betoL.cash === 1850, 'se lleva todo el bote');
 ok(gLand.limoPlayerId === pb, 'y la limusina');
-ok(betoL.bonus === 3, 'y una tarjeta de Bonificación');
+ok(betoL.tokens.length === 3, 'y una carta de Bonificación a la mano');
 
 console.log('21) Negociar cartas y fichas');
 // Ana tiene 2 exenciones; Beto, una de cárcel.
 const conCartas: GameState = {
   ...gPL,
   players: gPL.players.map((p) =>
-    p.id === pa ? { ...p, tokens: ['par-sin-renta', 'par-sin-renta'], spins: 2, bonus: 2 }
-    : { ...p, tokens: ['par-renta-doble'], spins: 0, bonus: 0 }),
+    p.id === pa ? { ...p, tokens: ['par-sin-renta', 'par-sin-renta'], spins: 2 }
+    : { ...p, tokens: ['par-renta-doble'], spins: 0 }),
 };
 let gT = reducer(conCartas, {
   type: 'PROPOSE_TRADE',
   trade: { aId: pa, bId: pb, aCash: 0, bCash: 0, aProps: [], bProps: [],
-           aCards: ['par-sin-renta'], bCards: ['par-renta-doble'], aSpins: 1, bSpins: 0, aBonus: 0, bBonus: 0 },
+           aCards: ['par-sin-renta'], bCards: ['par-renta-doble'], aSpins: 1, bSpins: 0 },
 });
 gT = reducer(gT, { type: 'ACCEPT_TRADE' });
 const anaT = gT.players.find((p) => p.id === pa)!;
@@ -310,14 +313,14 @@ ok(anaT.spins === 1 && betoT.spins === 1, 'la ficha de giro cambió de dueño');
 const falso = reducer(conCartas, {
   type: 'PROPOSE_TRADE',
   trade: { aId: pa, bId: pb, aCash: 0, bCash: 0, aProps: [], bProps: [],
-           aCards: ['arca-salir-carcel'], bCards: [], aSpins: 0, bSpins: 0, aBonus: 0, bBonus: 0 },
+           aCards: ['arca-salir-carcel'], bCards: [], aSpins: 0, bSpins: 0 },
 });
 const falsoOk = reducer(falso, { type: 'ACCEPT_TRADE' });
 ok(falsoOk.players.find((p) => p.id === pb)!.tokens.length === 1, 'ofrecer una carta que no tienes no transfiere nada');
 const muchas = reducer(conCartas, {
   type: 'PROPOSE_TRADE',
   trade: { aId: pa, bId: pb, aCash: 0, bCash: 0, aProps: [], bProps: [],
-           aCards: [], bCards: [], aSpins: 99, bSpins: 0, aBonus: 0, bBonus: 0 },
+           aCards: [], bCards: [], aSpins: 99, bSpins: 0 },
 });
 ok(reducer(muchas, { type: 'ACCEPT_TRADE' }).players.find((p) => p.id === pa)!.spins === 2,
   'ofrecer más fichas de las que tienes no se ejecuta');
@@ -428,7 +431,7 @@ const perks = (st: GameState, id: string) => st.players.find((p) => p.id === id)
 // Todas las de Bonificación se guardan en la mano.
 ok(cardsFor('bonificacion', bonif).every((c) => c.keep), 'todas las de Bonificación se conservan');
 let gH = run(stack(gP, 'par-casa-gratis'), { type: 'DRAW_CARD', deck: 'bonificacion', playerId: qa }, { type: 'RESOLVE_CARD' });
-ok(perks(gH, qa).tokens.length === 1, 'robarla la guarda en la mano, no la aplica');
+ok(perks(gH, qa).tokens.filter((t) => t === 'par-casa-gratis').length >= 1, 'robarla la guarda en la mano, no la aplica');
 ok(perks(gH, qa).freeHouses === 0, 'todavía no hay casa gratis pendiente');
 gH = reducer(gH, { type: 'USE_CARD', playerId: qa, cardId: 'par-casa-gratis' });
 ok(perks(gH, qa).freeHouses === 1, 'al usarla queda un crédito de casa gratis');
@@ -458,12 +461,45 @@ ok(perks(gL, qa).holdings.length === 1 && perks(gL, qa).freeProps === 0, 'la lim
 console.log('28) Caer en la Parada Libre da también un giro');
 const gLand2 = reducer({ ...gP, pot: 100 }, { type: 'LAND_FREE_PARKING', playerId: qa });
 const anaL = perks(gLand2, qa);
-ok(anaL.spins === 3 && anaL.bonus === 3, 'suma una ficha de giro y una de bonificación');
+ok(anaL.spins === 3, 'suma una ficha de giro');
+ok(anaL.tokens.length === 3, 'y una carta de Bonificación a la mano');
 ok(gLand2.limoPlayerId === qa && cashOf(gLand2, qa) === 1600, 'más la limusina y el bote');
 
 console.log('29) La ruleta lleva sus etiquetas');
 ok(WHEEL.every((f) => f.short.length > 0), 'todos los sectores tienen texto corto');
 ok(WHEEL.some((f) => f.short.includes('GRAN PREMIO')), 'incluye el Gran Premio');
+
+console.log('30) Intercambio forzoso: elegido y sin aprobación');
+let gS = createGame('SWAP');
+gS = { ...gS, settings: { ...gS.settings, cardPacks: ['base', 'parada-libre'] } };
+gS = run(gS, { type: 'ADD_PLAYER', name: 'Ana' }, { type: 'ADD_PLAYER', name: 'Beto' }, { type: 'START_GAME' });
+const [sa, sb] = gS.players.map((p) => p.id);
+gS = run(gS,
+  { type: 'BUY_PROPERTY', playerId: sa, propertyId: 'mediterranean' },
+  { type: 'BUY_PROPERTY', playerId: sb, propertyId: 'boardwalk' },
+);
+const own = (st: GameState, id: string) => st.players.find((p) => p.id === id)!.holdings.map((h) => h.propertyId);
+// Sin crédito no se puede forzar nada.
+ok(reducer(gS, { type: 'FORCE_SWAP', aId: sa, bId: sb, aProp: 'mediterranean', bProp: 'boardwalk' }) === gS,
+  'sin la carta no hay intercambio forzoso');
+let gSw = reducer(gS, { type: 'GRANT_PERK', playerId: sa, perk: 'forceSwaps' });
+gSw = reducer(gSw, { type: 'FORCE_SWAP', aId: sa, bId: sb, aProp: 'mediterranean', bProp: 'boardwalk' });
+ok(own(gSw, sa).includes('boardwalk') && !own(gSw, sa).includes('mediterranean'), 'Ana se lleva la que eligió');
+ok(own(gSw, sb).includes('mediterranean') && !own(gSw, sb).includes('boardwalk'), 'y entrega la suya');
+ok(gSw.pendingTrade === null, 'no queda ninguna propuesta pendiente: no hace falta aprobación');
+ok(perks(gSw, sa).forceSwaps === 0, 'consume el crédito');
+// Con casas encima no se puede (igual que en una negociación).
+let gCasas = reducer(gS, { type: 'GRANT_PERK', playerId: sa, perk: 'forceSwaps' });
+gCasas = run(gCasas,
+  { type: 'BUY_PROPERTY', playerId: sa, propertyId: 'baltic' },
+  { type: 'BUILD_HOUSE', playerId: sa, propertyId: 'mediterranean' },
+);
+ok(reducer(gCasas, { type: 'FORCE_SWAP', aId: sa, bId: sb, aProp: 'mediterranean', bProp: 'boardwalk' }).players
+  .find((p) => p.id === sb)!.holdings.some((h) => h.propertyId === 'boardwalk'),
+  'una propiedad con casas no se puede forzar');
+// La carta deja el crédito al usarla.
+const gCarta3 = playKeep(gS, 'par-intercambio', sa);
+ok(perks(gCarta3, sa).forceSwaps === 1, 'la carta 🔀 deja un intercambio pendiente');
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} ok, ${fail} fallidas`);
 process.exit(fail === 0 ? 0 : 1);
