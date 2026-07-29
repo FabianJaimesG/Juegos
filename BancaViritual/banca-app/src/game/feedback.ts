@@ -32,7 +32,14 @@ export function speak(text: string) {
       .replace(/→/g, ' a ')
       .replace(/↔/g, ' con ')
       .replace(/·/g, '. ')
-      .replace(/🎲|➕|✖️|🔁|🚫|💰|🏠|🏨|🏦|🟢/g, '')
+      .replace(/[／/]/g, ' ')
+      // Quita cualquier emoji/pictograma y sus selectores de variación.
+      .replace(/[\p{Extended_Pictographic}]/gu, '')
+      .replace(/[\u{FE00}-\u{FE0F}\u{20E3}\u{200D}]/gu, '')
+      // Símbolos sueltos: caras de dado (⚀-⚅), signos +/×/÷.
+      .replace(/[⚀-⚅]/g, '')
+      .replace(/[➕✖➗]/g, '')
+      .replace(/\s{2,}/g, ' ')
       .trim();
     if (!clean) return;
     const u = new SpeechSynthesisUtterance(clean);

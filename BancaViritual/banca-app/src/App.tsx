@@ -112,8 +112,6 @@ function BoardFrame({ rich = false }: { rich?: boolean }) {
           <span className="boardframe__deco boardframe__deco--money">💵</span>
           <span className="boardframe__deco boardframe__deco--city">🏙️</span>
           <span className="boardframe__deco boardframe__deco--mono">🕴️</span>
-          <span className="boardframe__deco boardframe__deco--star1">✨</span>
-          <span className="boardframe__deco boardframe__deco--star2">⭐</span>
           <span className="boardframe__deco boardframe__deco--bank">🏦</span>
         </>
       )}
@@ -187,9 +185,10 @@ export default function App() {
     }
     if (top.id === lastLogId.current) return;
     lastLogId.current = top.id;
-    if (state.settings.sound) blip();
+    // El sonido de movimientos solo suena en el dispositivo visualizador (la pantalla).
+    if (state.settings.sound && meId === VIEWER) blip();
     if (state.settings.voice) speak(top.text);
-  }, [state.log, state.settings.sound, state.settings.voice]);
+  }, [state.log, state.settings.sound, state.settings.voice, meId]);
 
   // Salida propia: este dispositivo se va a una sala nueva (no afecta a los demás).
   const newRoom = () => {
@@ -378,7 +377,9 @@ export default function App() {
       )}
 
       <section className="players">
-        {state.players.map((p) => (
+        {/* En cada dispositivo, el propio jugador se muestra primero para no
+            tener que bajar la pantalla para sus acciones (no cambia el turno). */}
+        {(me ? [me, ...state.players.filter((p) => p.id !== me.id)] : state.players).map((p) => (
           <PlayerTile
             key={p.id}
             p={p}
@@ -1086,7 +1087,7 @@ function TradePanel({
     has > 0 && (
       <label className="tradetok">
         <span>{emoji} {label} <small>({has})</small></span>
-        <input type="number" min={0} max={has} value={value}
+        <input type="number" inputMode="numeric" min={0} max={has} value={value === 0 ? '' : value} placeholder="0"
           onChange={(e) => set(Math.max(0, Math.min(has, parseInt(e.target.value, 10) || 0)))} />
       </label>
     );
@@ -1305,9 +1306,11 @@ function ParadaLibreBar({ state, act, money, me, canControl, revealWheel }: {
         <span className="parada__add">
           <input
             type="number"
+            inputMode="numeric"
             min={0}
             step={25}
-            value={amount}
+            value={amount === 0 ? '' : amount}
+            placeholder="0"
             onChange={(e) => setAmount(Math.max(0, parseInt(e.target.value, 10) || 0))}
             title="Cuánto paga el jugador en turno al bote"
           />
@@ -2212,7 +2215,7 @@ function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
       <h2>Opciones de la partida</h2>
       <label className="setrow setrow--num">
         <span><b>Dinero inicial</b><br /><span className="hint">Con cuánto empieza cada jugador.</span></span>
-        <input type="number" min={0} step={50} value={s.initialBalance} onChange={(e) => setS({ initialBalance: Math.max(0, parseInt(e.target.value, 10) || 0) })} />
+        <input type="number" inputMode="numeric" min={0} step={50} value={s.initialBalance === 0 ? '' : s.initialBalance} placeholder="0" onChange={(e) => setS({ initialBalance: Math.max(0, parseInt(e.target.value, 10) || 0) })} />
       </label>
       <label className="setrow"><input type="checkbox" checked={s.dice} onChange={(e) => setS({ dice: e.target.checked })} /> <span><b>Dados</b></span></label>
       <label className="setrow"><input type="checkbox" checked={s.special} onChange={(e) => setS({ special: e.target.checked })} /> <span><b>Dado especial</b></span></label>
@@ -2229,7 +2232,7 @@ function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
               no cobrarse para fabricar fichas gratis del banco. 0 = sin tope.
             </span>
           </span>
-          <input type="number" min={0} max={9} value={s.maxSpins}
+          <input type="number" inputMode="numeric" min={0} max={9} value={s.maxSpins === 0 ? '' : s.maxSpins} placeholder="0"
             onChange={(e) => setS({ maxSpins: Math.max(0, parseInt(e.target.value, 10) || 0) })} />
         </label>
       )}
