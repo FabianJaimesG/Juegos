@@ -220,5 +220,26 @@ ok(reducer(gcr, { type: 'PAY_RENT', fromId: anaC, toId: betoC, propertyId: 'orie
 gcr = { ...gcr, players: gcr.players.map((p) => (p.id === betoC ? { ...p, spins: 0 } : p)) };
 ok(reducer(gcr, { type: 'RENT_TO_SPIN', fromId: anaC, toId: betoC }).players.find((p) => p.id === betoC)!.spins === 0, 'renta→ficha bloqueado si el pagador está en la cárcel');
 
+console.log('12) Negociación: no supera el tope de fichas de giro');
+let gt = createGame('TRD');
+gt = { ...gt, settings: { ...gt.settings, cardPacks: ['base', 'parada-libre'], maxSpins: 3 } };
+gt = run(gt,
+  { type: 'ADD_PLAYER', name: 'Ana', admin: true },
+  { type: 'ADD_PLAYER', name: 'Beto' },
+  { type: 'START_GAME' },
+);
+const [anaT, betoT] = gt.players.map((p) => p.id);
+// Beto ya tiene 3 (tope). Ana le pasa 1 → superaría el tope → trueque inválido.
+gt = { ...gt, players: gt.players.map((p) => (p.id === anaT ? { ...p, spins: 2 } : p.id === betoT ? { ...p, spins: 3 } : p)) };
+const gtBad = reducer(gt, { type: 'PROPOSE_TRADE', trade: { aId: anaT, bId: betoT, aCash: 0, bCash: 0, aProps: [], bProps: [], aSpins: 1, bSpins: 0 } });
+const gtBad2 = reducer({ ...gtBad, pendingTrade: gtBad.pendingTrade }, { type: 'ACCEPT_TRADE' });
+ok(gtBad2.players.find((p) => p.id === betoT)!.spins === 3, 'aceptar un trueque que supera el tope no da la ficha');
+ok(gtBad2.pendingTrade === null, 'el trueque inválido se cancela');
+// Beto en 2 → recibir 1 llega a 3 (permitido).
+let gt2 = { ...gt, players: gt.players.map((p) => (p.id === betoT ? { ...p, spins: 2 } : p)) };
+gt2 = reducer(gt2, { type: 'PROPOSE_TRADE', trade: { aId: anaT, bId: betoT, aCash: 0, bCash: 0, aProps: [], bProps: [], aSpins: 1, bSpins: 0 } });
+gt2 = reducer(gt2, { type: 'ACCEPT_TRADE' });
+ok(gt2.players.find((p) => p.id === betoT)!.spins === 3, 'trueque hasta el tope sí se permite');
+
 console.log(`\n${pass} ok, ${fail} fallos`);
 process.exit(fail ? 1 : 0);

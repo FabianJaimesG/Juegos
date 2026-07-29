@@ -419,7 +419,7 @@ function mapPlayer(s: GameState, id: string, fn: (p: RuntimePlayer) => RuntimePl
 const palette = 10; // colores disponibles (índices 0..9)
 
 /** Ejecuta una negociación sobre el arreglo de jugadores; null si es inválida. */
-function executeTrade(players: RuntimePlayer[], t: PendingTrade): RuntimePlayer[] | null {
+function executeTrade(players: RuntimePlayer[], t: PendingTrade, maxSpins = 0): RuntimePlayer[] | null {
   const A = players.find((x) => x.id === t.aId);
   const B = players.find((x) => x.id === t.bId);
   if (!A || !B || A.id === B.id) return null;
@@ -473,6 +473,8 @@ function executeTrade(players: RuntimePlayer[], t: PendingTrade): RuntimePlayer[
     tokens: [...bRest, ...aCards],
     spins: B.spins - bSpins + aSpins,
   };
+  // Tope de fichas de giro: ningún lado puede terminar con más de lo permitido.
+  if (maxSpins > 0 && (newA.spins > maxSpins || newB.spins > maxSpins)) return null;
   return players.map((p) => (p.id === A.id ? newA : p.id === B.id ? newB : p));
 }
 
@@ -941,7 +943,7 @@ export function reducer(s: GameState, a: Action): GameState {
     case 'ACCEPT_TRADE': {
       const t = s.pendingTrade;
       if (!t) return s;
-      const players = executeTrade(s.players, t);
+      const players = executeTrade(s.players, t, s.settings.maxSpins);
       if (!players) return { ...s, pendingTrade: null, log: log(s, 'Negociación inválida, cancelada') };
       return { ...s, players, pendingTrade: null, log: log(s, `Negociación aceptada — ${tradeDetail(s, t)}`) };
     }

@@ -589,7 +589,7 @@ function SheetContent({
 
   if (sheet.kind === 'trade') {
     const others = state.players.filter((p) => p.id !== me.id && !p.bankrupt);
-    return <TradePanel me={me} others={others} act={act} money={money} close={close} sym={state.currencySymbol} />;
+    return <TradePanel me={me} others={others} act={act} money={money} close={close} sym={state.currencySymbol} maxSpins={state.settings.maxSpins} />;
   }
   return null;
 }
@@ -1034,7 +1034,7 @@ function ForceSwapPanel({ me, others, act, close }: {
 }
 
 function TradePanel({
-  me, others, act, money, close, sym,
+  me, others, act, money, close, sym, maxSpins,
 }: {
   me: RuntimePlayer;
   others: RuntimePlayer[];
@@ -1042,6 +1042,7 @@ function TradePanel({
   money: (n: number) => string;
   close: () => void;
   sym: string;
+  maxSpins: number;
 }) {
   const [otherId, setOtherId] = useState<string>(others[0]?.id ?? '');
   const [aCash, setACash] = useState('');
@@ -1069,9 +1070,13 @@ function TradePanel({
     nA === 0 && nB === 0 && aProps.length === 0 && bProps.length === 0 &&
     aCardIds.length === 0 && bCardIds.length === 0 &&
     aSpins === 0 && bSpins === 0;
+  // Fichas resultantes tras el trueque, para respetar el tope configurado.
+  const meAfterSpins = me.spins - aSpins + bSpins;
+  const otherAfterSpins = other.spins - bSpins + aSpins;
+  const overCap = maxSpins > 0 && (meAfterSpins > maxSpins || otherAfterSpins > maxSpins);
   const valid =
     !nothing && me.cash >= nA && other.cash >= nB &&
-    me.spins >= aSpins && other.spins >= bSpins;
+    me.spins >= aSpins && other.spins >= bSpins && !overCap;
 
   const toggleIdx = (list: number[], set: (v: number[]) => void, i: number) =>
     set(list.includes(i) ? list.filter((x) => x !== i) : [...list, i]);
@@ -1170,7 +1175,10 @@ function TradePanel({
           close();
         }}
       >
-        {valid ? `Proponer a ${other.name}` : nothing ? 'Selecciona algo para intercambiar' : 'Fondos insuficientes'}
+        {valid ? `Proponer a ${other.name}`
+          : nothing ? 'Selecciona algo para intercambiar'
+            : overCap ? `Supera el tope de fichas de giro (${maxSpins})`
+              : 'Fondos insuficientes'}
       </button>
     </div>
   );
@@ -1385,16 +1393,16 @@ function RentToSpin({ state, act, payer, canAct }: {
   );
   const noSpins = payer.spins <= 0;
   const inJail = payer.jail > 0;
-  const blocked = !canAct || noSpins || inJail || eligible.length === 0;
+  // El botón solo se bloquea por motivos del propio jugador (turno/fichas/cárcel);
+  // si no hay a quién pagarle, se abre igual y se explica dentro.
+  const blocked = !canAct || noSpins || inJail;
   const title = !canAct
     ? 'Solo el jugador en turno puede pagar con ficha'
     : inJail
       ? 'En la cárcel no caes en propiedades'
       : noSpins
         ? 'No tienes fichas de giro para pagar'
-        : eligible.length === 0
-          ? 'Ningún jugador con propiedades puede recibir la ficha (o llegaron al tope)'
-          : `Paga la renta con una de tus fichas 🎡 al dueño de la propiedad${max > 0 ? ` (tope: ${max})` : ''}`;
+        : `Paga la renta con una de tus fichas 🎡 al dueño de la propiedad${max > 0 ? ` (tope: ${max})` : ''}`;
 
   return (
     <span className="rent2spin">
@@ -1408,6 +1416,9 @@ function RentToSpin({ state, act, payer, canAct }: {
       </button>
       {open && !blocked && (
         <span className="rent2spin__menu">
+          {eligible.length === 0 && (
+            <span className="rent2spin__empty">Ningún jugador con propiedades puede recibir la ficha{max > 0 ? ` (o llegaron al tope de ${max})` : ''}.</span>
+          )}
           {eligible.map((p) => (
             <button
               key={p.id}
