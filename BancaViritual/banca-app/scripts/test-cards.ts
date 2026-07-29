@@ -38,6 +38,9 @@ const stack = (s: GameState, cardId: string): GameState => {
 };
 const play = (s: GameState, cardId: string, playerId: string): GameState =>
   run(stack(s, cardId), { type: 'DRAW_CARD', deck: getCard(cardId)!.deck, playerId }, { type: 'RESOLVE_CARD' });
+/** Roba una carta que se guarda y la usa en el acto (para probar su efecto). */
+const playKeep = (s: GameState, cardId: string, playerId: string): GameState =>
+  reducer(play(s, cardId, playerId), { type: 'USE_CARD', playerId, cardId });
 
 console.log('2) Efectos de dinero');
 let g2 = play(g, 'arca-error-bancario', ana);
@@ -176,19 +179,19 @@ ok(gPot.pot === 300 && cashOf(gPot, pa) === 1400, 'un jugador paga al bote y se 
 const gPobre = reducer({ ...gPot, players: gPot.players.map((p) => (p.id === pb ? { ...p, cash: 50 } : p)) },
   { type: 'POT_ADD', amount: 100, playerId: pb });
 ok(gPobre.pot === 300, 'no se puede pagar al bote sin fondos');
-const gPremio = play(gPot, 'par-gran-premio', pb);
+const gPremio = playKeep(gPot, 'par-gran-premio', pb);
 ok(gPremio.pot === 0 && cashOf(gPremio, pb) === 1800, 'Gran Premio vacía el bote al ganador');
-const gVacio = play(gPL, 'par-gran-premio', pb);
+const gVacio = playKeep(gPL, 'par-gran-premio', pb);
 ok(cashOf(gVacio, pb) === 1500, 'con el bote vacío no cobra nada');
 
 console.log('13) La limusina dorada');
-let gLimo = play(gPL, 'par-limusina', pa);
+let gLimo = playKeep(gPL, 'par-limusina', pa);
 ok(gLimo.limoPlayerId === pa, 'la carta de mejora te da la limusina');
 gLimo = reducer(gLimo, { type: 'SET_LIMO', playerId: pb });
 ok(gLimo.limoPlayerId === pb, 'otro jugador se la puede llevar');
 gLimo = reducer(gLimo, { type: 'SET_LIMO', playerId: null });
 ok(gLimo.limoPlayerId === null, 'se pierde al ir a la cárcel');
-const gQuiebra = reducer(play(gPL, 'par-limusina', pa), { type: 'DECLARE_BANKRUPTCY', playerId: pa });
+const gQuiebra = reducer(playKeep(gPL, 'par-limusina', pa), { type: 'DECLARE_BANKRUPTCY', playerId: pa });
 ok(gQuiebra.limoPlayerId === null, 'la bancarrota también la suelta');
 
 console.log('14) Casa gratis (se salta las reglas de grupo)');
@@ -196,6 +199,7 @@ let gCasa = run(gPL, { type: 'BUY_PROPERTY', playerId: pa, propertyId: 'mediterr
 const cashAntes = cashOf(gCasa, pa);
 const gNormal = reducer(gCasa, { type: 'BUILD_HOUSE', playerId: pa, propertyId: 'mediterranean' });
 ok(gNormal === gCasa, 'sin el grupo completo NO se puede construir normalmente');
+gCasa = reducer(gCasa, { type: 'GRANT_PERK', playerId: pa, perk: 'freeHouses' });
 gCasa = reducer(gCasa, { type: 'BUILD_HOUSE', playerId: pa, propertyId: 'mediterranean', free: true });
 ok(gCasa.players.find((p) => p.id === pa)!.holdings[0].houses === 1, 'con la carta sí se construye');
 ok(cashOf(gCasa, pa) === cashAntes, 'y no cuesta nada');
@@ -211,7 +215,8 @@ ok(gKeep.decks.bonificacion.discard[0] === 'par-sin-renta', 'y vuelve al descart
 const dos = { ...gPL, players: gPL.players.map((p) => (p.id === pa ? { ...p, tokens: ['par-sin-renta', 'par-sin-renta'] } : p)) };
 const unaMenos = reducer(dos, { type: 'USE_CARD', playerId: pa, cardId: 'par-sin-renta' });
 ok(unaMenos.players.find((p) => p.id === pa)!.tokens.length === 1, 'gastar una copia deja la otra');
-ok(CARDS.filter((c) => c.keep).length === 5, 'hay 5 tipos de carta que se conservan (2 de cárcel, indulto, exención y renta doble)');
+ok(CARDS.filter((c) => c.keep).length === 3 + cardsFor('bonificacion', ['parada-libre']).length,
+  'se conservan las 3 de cárcel/indulto más todas las de Bonificación');
 
 console.log('16) Fichas');
 const gGasta = reducer(gPL, { type: 'SPEND_TOKEN', playerId: pa, token: 'bonus' });
@@ -411,6 +416,54 @@ gSolo = run(gSolo, { type: 'ADD_PLAYER', name: 'Ana' }, { type: 'START_GAME' });
 ok(gSolo.decks.arca.draw.length === cardsFor('arca', ['enredos']).length,
   'se puede jugar con una expansión y sin las clásicas');
 ok(!gSolo.decks.arca.draw.includes('arca-error-bancario'), 'no se cuela ninguna carta clásica');
+
+console.log('27) Créditos: casa y propiedad gratis se eligen al usarlas');
+const bonif = ['base', 'parada-libre'];
+let gP = createGame('PERK');
+gP = { ...gP, settings: { ...gP.settings, cardPacks: bonif } };
+gP = run(gP, { type: 'ADD_PLAYER', name: 'Ana' }, { type: 'ADD_PLAYER', name: 'Beto' }, { type: 'START_GAME' });
+const [qa] = gP.players.map((p) => p.id);
+const perks = (st: GameState, id: string) => st.players.find((p) => p.id === id)!;
+
+// Todas las de Bonificación se guardan en la mano.
+ok(cardsFor('bonificacion', bonif).every((c) => c.keep), 'todas las de Bonificación se conservan');
+let gH = run(stack(gP, 'par-casa-gratis'), { type: 'DRAW_CARD', deck: 'bonificacion', playerId: qa }, { type: 'RESOLVE_CARD' });
+ok(perks(gH, qa).tokens.length === 1, 'robarla la guarda en la mano, no la aplica');
+ok(perks(gH, qa).freeHouses === 0, 'todavía no hay casa gratis pendiente');
+gH = reducer(gH, { type: 'USE_CARD', playerId: qa, cardId: 'par-casa-gratis' });
+ok(perks(gH, qa).freeHouses === 1, 'al usarla queda un crédito de casa gratis');
+
+// Sin el grupo completo, pero con crédito, sí se puede construir donde elija.
+gH = reducer(gH, { type: 'BUY_PROPERTY', playerId: qa, propertyId: 'mediterranean' });
+const cashPrev = cashOf(gH, qa);
+const gBuilt = reducer(gH, { type: 'BUILD_HOUSE', playerId: qa, propertyId: 'mediterranean', free: true });
+ok(gBuilt.players.find((p) => p.id === qa)!.holdings[0].houses === 1, 'coloca la casa donde elige');
+ok(cashOf(gBuilt, qa) === cashPrev, 'sin coste');
+ok(perks(gBuilt, qa).freeHouses === 0, 'y consume el crédito');
+ok(reducer(gBuilt, { type: 'BUILD_HOUSE', playerId: qa, propertyId: 'mediterranean', free: true }) === gBuilt,
+  'sin crédito no se puede volver a construir gratis');
+
+// Propiedad gratis: hace falta crédito o limusina.
+ok(reducer(gP, { type: 'BUY_PROPERTY', playerId: qa, propertyId: 'boardwalk', free: true }) === gP,
+  'sin crédito ni limusina no hay propiedad gratis');
+let gF = reducer(gP, { type: 'GRANT_PERK', playerId: qa, perk: 'freeProps' });
+gF = reducer(gF, { type: 'BUY_PROPERTY', playerId: qa, propertyId: 'boardwalk', free: true });
+ok(perks(gF, qa).holdings.length === 1 && cashOf(gF, qa) === 1500, 'con crédito se queda la propiedad sin pagar');
+ok(perks(gF, qa).freeProps === 0, 'y consume el crédito');
+// Con limusina no se gasta crédito (vale mientras la lleve).
+let gL = { ...gP, limoPlayerId: qa };
+gL = reducer(gL, { type: 'BUY_PROPERTY', playerId: qa, propertyId: 'parkplace', free: true });
+ok(perks(gL, qa).holdings.length === 1 && perks(gL, qa).freeProps === 0, 'la limusina no consume créditos');
+
+console.log('28) Caer en la Parada Libre da también un giro');
+const gLand2 = reducer({ ...gP, pot: 100 }, { type: 'LAND_FREE_PARKING', playerId: qa });
+const anaL = perks(gLand2, qa);
+ok(anaL.spins === 3 && anaL.bonus === 3, 'suma una ficha de giro y una de bonificación');
+ok(gLand2.limoPlayerId === qa && cashOf(gLand2, qa) === 1600, 'más la limusina y el bote');
+
+console.log('29) La ruleta lleva sus etiquetas');
+ok(WHEEL.every((f) => f.short.length > 0), 'todos los sectores tienen texto corto');
+ok(WHEEL.some((f) => f.short.includes('GRAN PREMIO')), 'incluye el Gran Premio');
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} ok, ${fail} fallidas`);
 process.exit(fail === 0 ? 0 : 1);

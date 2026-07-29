@@ -32,6 +32,10 @@ export interface RuntimePlayer {
   bonus: number;
   /** Prisión: turnos que lleva encerrado. 0 = libre. */
   jail: number;
+  /** Casas gratis pendientes de colocar (carta o ruleta). */
+  freeHouses: number;
+  /** Propiedades gratis pendientes de tomar (carta o ruleta). */
+  freeProps: number;
   /** Administrador: su dispositivo puede operar a todos los jugadores. */
   admin: boolean;
   /** Id del dispositivo que "reclamó" a este jugador (para no robar identidades). */
@@ -162,6 +166,8 @@ export function hydrate(s: GameState): GameState {
       spins: p.spins ?? 0,
       bonus: p.bonus ?? 0,
       jail: p.jail ?? 0,
+      freeHouses: p.freeHouses ?? 0,
+      freeProps: p.freeProps ?? 0,
     })),
   };
 }
@@ -180,7 +186,7 @@ export type Action =
   | { type: 'TRANSFER'; fromId: string; toIds: string[]; amount: number } // a cada uno
   | { type: 'COLLECT'; toId: string; fromIds: string[]; amount: number } // cobro entre jugadores
   | { type: 'SALIDA'; playerId: string }
-  | { type: 'BUY_PROPERTY'; playerId: string; propertyId: string; price?: number }
+  | { type: 'BUY_PROPERTY'; playerId: string; propertyId: string; price?: number; free?: boolean }
   | { type: 'MORTGAGE'; playerId: string; propertyId: string }
   | { type: 'UNMORTGAGE'; playerId: string; propertyId: string }
   | { type: 'BUILD_HOUSE'; playerId: string; propertyId: string; free?: boolean }
@@ -205,6 +211,7 @@ export type Action =
   | { type: 'GO_TO_JAIL'; playerId: string }
   | { type: 'PAY_BAIL'; playerId: string } // paga la fianza y sale
   | { type: 'LEAVE_JAIL'; playerId: string; reason?: string } // sale gratis (dobles, carta, indulto)
+  | { type: 'GRANT_PERK'; playerId: string; perk: 'freeHouses' | 'freeProps'; delta?: number }
   | { type: 'SET_SETTINGS'; patch: Partial<GameSettings> }
   | { type: 'PAY_RENT'; fromId: string; toId: string; propertyId: string } // el jugador en turno paga renta al dueño
   | { type: 'NEXT_TURN' }
@@ -440,6 +447,11 @@ function actionFor(s: GameState, e: CardEffect, p: RuntimePlayer): Action | null
     case 'to_jail':
       // El motor marca el encierro; mover la ficha sigue siendo cosa del jugador.
       return { type: 'GO_TO_JAIL', playerId: p.id };
+    case 'free_house':
+      // No se coloca aquí: queda a crédito para que elija la propiedad.
+      return { type: 'GRANT_PERK', playerId: p.id, perk: 'freeHouses' };
+    case 'free_property':
+      return { type: 'GRANT_PERK', playerId: p.id, perk: 'freeProps' };
     case 'goto':
       return e.bonus ? { type: 'BANK_TO_PLAYER', playerId: p.id, amount: e.bonus } : null;
     default:
@@ -470,6 +482,8 @@ export function reducer(s: GameState, a: Action): GameState {
         spins: 0,
         bonus: 0,
         jail: 0,
+        freeHouses: 0,
+        freeProps: 0,
         admin: a.admin ?? false,
       };
       return { ...s, players: [...s.players, p], log: log(s, `Se unió ${p.name}`) };
@@ -499,6 +513,8 @@ export function reducer(s: GameState, a: Action): GameState {
         spins: start.spins,
         bonus: start.bonus,
         jail: 0,
+        freeHouses: 0,
+        freeProps: 0,
       }));
       return {
         ...s,
@@ -611,16 +627,22 @@ export function reducer(s: GameState, a: Action): GameState {
       // No se puede comprar si ya la posee alguien.
       const taken = s.players.some((x) => x.holdings.some((h) => h.propertyId === a.propertyId));
       if (taken) return s;
-      const price = a.price ?? prop.price;
+      // Gratis: con la limusina dorada o gastando un crédito de "propiedad gratis".
+      const withLimo = s.limoPlayerId === p.id;
+      if (a.free && !withLimo && p.freeProps <= 0) return s;
+      const price = a.free ? 0 : a.price ?? prop.price;
       if (p.cash - price < MIN_CASH) return s;
       return {
         ...s,
         players: mapPlayer(s, a.playerId, (x) => ({
           ...x,
           cash: x.cash - price,
+          freeProps: a.free && !withLimo ? x.freeProps - 1 : x.freeProps,
           holdings: [...x.holdings, { propertyId: a.propertyId, houses: 0, mortgaged: false }],
         })),
-        log: log(s, `${p.name} compró ${prop.name} por ${price}`),
+        log: log(s, a.free
+          ? `${p.name} se quedó ${prop.name} gratis${withLimo ? ' 🚗 (limusina)' : ''}`
+          : `${p.name} compró ${prop.name} por ${price}`),
       };
     }
 
@@ -667,6 +689,7 @@ export function reducer(s: GameState, a: Action): GameState {
       const h0 = p.holdings.find((x) => x.propertyId === a.propertyId);
       // "Casa gratis" (Parada Libre): se salta grupo completo, construcción pareja y coste.
       if (a.free) {
+        if (p.freeHouses <= 0) return s; // no tiene ninguna casa gratis pendiente
         if (!h0 || !prop.isBuildable || h0.mortgaged || h0.houses >= 5) return s;
       } else {
         if (!canBuildOn(holdingsOf(p), a.propertyId, s.settings.evenBuild)) return s;
@@ -681,6 +704,7 @@ export function reducer(s: GameState, a: Action): GameState {
         players: mapPlayer(s, a.playerId, (x) => ({
           ...x,
           cash: x.cash - (a.free ? 0 : prop.houseCost),
+          freeHouses: a.free ? x.freeHouses - 1 : x.freeHouses,
           holdings: x.holdings.map((y) =>
             y.propertyId === a.propertyId ? { ...y, houses: y.houses + 1 } : y,
           ),
@@ -739,7 +763,7 @@ export function reducer(s: GameState, a: Action): GameState {
       }
       return {
         ...s,
-        players: mapPlayer(s, a.playerId, (x) => ({ ...x, bankrupt: true, cash: 0, holdings: [], tokens: [], spins: 0, bonus: 0 })),
+        players: mapPlayer(s, a.playerId, (x) => ({ ...x, bankrupt: true, cash: 0, holdings: [], tokens: [], spins: 0, bonus: 0, freeHouses: 0, freeProps: 0 })),
         decks,
         limoPlayerId: s.limoPlayerId === p.id ? null : s.limoPlayerId,
         log: log(s, `${p.name} se declaró en bancarrota (sus propiedades vuelven al banco)`),
@@ -957,11 +981,11 @@ export function reducer(s: GameState, a: Action): GameState {
       if (a.playerId === null) {
         if (!s.limoPlayerId) return s;
         const prev = s.players.find((x) => x.id === s.limoPlayerId);
-        return { ...s, limoPlayerId: null, log: log(s, `🚘 ${prev?.name ?? 'Alguien'} pierde la limusina dorada`) };
+        return { ...s, limoPlayerId: null, log: log(s, `🚗 ${prev?.name ?? 'Alguien'} pierde la limusina dorada`) };
       }
       const p = s.players.find((x) => x.id === a.playerId);
       if (!p || s.limoPlayerId === p.id) return s;
-      return { ...s, limoPlayerId: p.id, log: log(s, `🚘 ${p.name} se lleva la limusina dorada`) };
+      return { ...s, limoPlayerId: p.id, log: log(s, `🚗 ${p.name} se lleva la limusina dorada`) };
     }
 
     case 'SPIN_WHEEL': {
@@ -993,6 +1017,18 @@ export function reducer(s: GameState, a: Action): GameState {
         ...s,
         players: mapPlayer(s, owner.id, (x) => ({ ...x, spins: x.spins + 1 })),
         log: log(s, `${owner.name} perdonó la renta y tomó una ficha de giro 🎡`),
+      };
+    }
+
+    case 'GRANT_PERK': {
+      const p = s.players.find((x) => x.id === a.playerId);
+      const delta = a.delta ?? 1;
+      if (!p || p[a.perk] + delta < 0) return s;
+      const what = a.perk === 'freeHouses' ? '🏠 casa gratis' : '🎁 propiedad gratis';
+      return {
+        ...s,
+        players: mapPlayer(s, p.id, (x) => ({ ...x, [a.perk]: x[a.perk] + delta })),
+        log: delta > 0 ? log(s, `${p.name} tiene ${what} por usar`) : s.log,
       };
     }
 
@@ -1037,10 +1073,12 @@ export function reducer(s: GameState, a: Action): GameState {
       const amount = s.pot;
       return {
         ...s,
-        players: mapPlayer(s, p.id, (x) => ({ ...x, cash: x.cash + amount, bonus: x.bonus + 1 })),
+        players: mapPlayer(s, p.id, (x) => ({
+          ...x, cash: x.cash + amount, bonus: x.bonus + 1, spins: x.spins + 1,
+        })),
         pot: 0,
         limoPlayerId: p.id,
-        log: log(s, `🅿️ ${p.name} cayó en la Parada Libre: +${amount}, la limusina 🚘 y una tarjeta ⭐`),
+        log: log(s, `🅿️ ${p.name} cayó en la Parada Libre: +${amount}, la limusina 🚗, una tarjeta ⭐ y un giro 🎡`),
       };
     }
 

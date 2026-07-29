@@ -407,3 +407,68 @@
   width: 100%; margin-top: 0.3rem; background: #eab308; color: #422006;
   border: 0; border-radius: 8px; padding: 0.45rem; cursor: pointer; font-weight: 700; font-size: 0.85rem;
 }
+
+/* ─── Ruleta animada ─── */
+.wheel__stage { position: relative; width: min(78vw, 300px); margin: 0.8rem auto 0.4rem; }
+.wheel__svg { width: 100%; height: auto; display: block; transform: rotate(0deg); }
+/* Gira varias vueltas y frena en el sector ganador (calculado en el componente). */
+.wheel__svg.is-spinning { animation: bv-spin 3.1s cubic-bezier(0.17, 0.67, 0.16, 1) forwards; }
+@keyframes bv-spin { from { transform: rotate(0deg); } to { transform: rotate(var(--spin)); } }
+.wheel__pointer {
+  position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+  width: 0; height: 0; z-index: 2;
+  border-left: 12px solid transparent; border-right: 12px solid transparent;
+  border-top: 22px solid #eab308;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.4));
+}
+@media (prefers-reduced-motion: reduce) {
+  .wheel__svg.is-spinning { animation-duration: 0.3s; }
+}
+
+/* ─── Limusina dorada ─── */
+.limo {
+  display: inline-block; background: linear-gradient(135deg, #fde047, #eab308 60%, #a16207);
+  border-radius: 999px; padding: 0.05rem 0.3rem; box-shadow: 0 0 0 1px rgba(0,0,0,.15);
+}
+.parada__limo--on { background: linear-gradient(135deg, #fde047, #eab308); color: #422006; font-weight: 700; }
+
+/* ─── Mano de cartas ─── */
+.ptile__hand {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; width: 100%;
+  background: #fffbeb; border: 1px dashed #fbbf24; border-radius: 8px;
+  padding: 0.3rem 0.45rem; margin-bottom: 0.5rem; cursor: pointer;
+}
+.ptile__card { font-size: 1rem; line-height: 1.2; }
+.ptile__handmore { margin-left: auto; font-size: 0.75rem; color: #92400e; font-weight: 700; }
+
+.hand { display: grid; gap: 0.7rem; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); margin: 0.6rem 0; }
+.handcard {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  overflow: hidden; text-align: center; padding-bottom: 0.6rem;
+}
+.handcard__band {
+  background: var(--deck-color); color: #10231b; font-weight: 800;
+  font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.4rem;
+}
+.handcard__emoji { font-size: 2rem; margin: 0.5rem 0 0.2rem; }
+.handcard__text { margin: 0 0.6rem 0.6rem; font-size: 0.82rem; line-height: 1.35; }
+.handcard .confirm { width: calc(100% - 1.2rem); margin: 0 0.6rem; padding: 0.5rem; font-size: 0.9rem; }
+
+/* ─── Carta pendiente / avisos ─── */
+.gcard__later {
+  background: transparent; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 10px; padding: 0.55rem; cursor: pointer; font-size: 0.9rem;
+}
+.gcard__warn {
+  margin: 0 1rem 0.8rem; padding: 0.6rem; background: #fef3c7; color: #78350f;
+  border-radius: 8px; font-size: 0.82rem; line-height: 1.4;
+}
+.pendingcard {
+  width: 100%; background: #fde68a; color: #78350f; border: 0; border-radius: 10px;
+  padding: 0.6rem; margin-bottom: 0.6rem; cursor: pointer; font-weight: 700; font-size: 0.9rem;
+}
+.perk {
+  background: #dcfce7; color: #166534; border-radius: 8px;
+  padding: 0.5rem 0.6rem; margin: 0.4rem 0; font-size: 0.85rem;
+}
+.owned__free { background: #eab308 !important; color: #422006 !important; font-weight: 700; }

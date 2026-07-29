@@ -263,28 +263,29 @@ const PRISION: CardDef[] = [
 ];
 
 // ── 🅿️ Parada Libre ──
-// Mazo propio de BONIFICACIÓN (24 cartas). El reparto de copias busca que las
-// cartas decisivas (Gran Premio, Limusina) sean un evento y no rutina.
+// Mazo propio de BONIFICACIÓN (24 cartas). TODAS se guardan en la mano: el
+// jugador las acumula y decide en qué momento usarlas. El reparto de copias
+// busca que las decisivas (Gran Premio, Limusina) sean un evento y no rutina.
 const PARADA: CardDef[] = [
-  { id: 'par-casa-gratis', deck: 'bonificacion', pack: 'parada-libre', emoji: '🏠', copies: 5,
+  { id: 'par-casa-gratis', deck: 'bonificacion', pack: 'parada-libre', emoji: '🏠', keep: true, copies: 5,
     text: 'Casa gratis. Construye una casa en cualquiera de tus propiedades, aunque no tengas el grupo de color completo.',
     effect: { kind: 'free_house' } },
   { id: 'par-sin-renta', deck: 'bonificacion', pack: 'parada-libre', emoji: '🛡️', copies: 5, keep: true,
     text: 'No pagas renta la próxima vez que caigas en una propiedad de otro jugador. Consérvala hasta usarla.',
     effect: { kind: 'rent_exempt' } },
-  { id: 'par-limusina', deck: 'bonificacion', pack: 'parada-libre', emoji: '🚘', copies: 3,
+  { id: 'par-limusina', deck: 'bonificacion', pack: 'parada-libre', emoji: '🚘', keep: true, copies: 3,
     text: 'Mejora de vehículo. Cambia tu ficha por la limusina dorada: las propiedades libres donde caigas son tuyas gratis y no pagas renta a nadie.',
     effect: { kind: 'limo' } },
-  { id: 'par-propiedad-gratis', deck: 'bonificacion', pack: 'parada-libre', emoji: '🎁', copies: 4,
+  { id: 'par-propiedad-gratis', deck: 'bonificacion', pack: 'parada-libre', emoji: '🎁', keep: true, copies: 4,
     text: 'Propiedad gratis. Toma cualquier propiedad sin dueño, sin tener que caer en ella.',
     effect: { kind: 'free_property' } },
   { id: 'par-renta-doble', deck: 'bonificacion', pack: 'parada-libre', emoji: '💰', copies: 3, keep: true,
     text: 'Cobra renta doble la próxima vez que un jugador caiga en una de tus propiedades. Consérvala hasta usarla.',
     effect: { kind: 'rent_double' } },
-  { id: 'par-intercambio', deck: 'bonificacion', pack: 'parada-libre', emoji: '🔀', copies: 2,
+  { id: 'par-intercambio', deck: 'bonificacion', pack: 'parada-libre', emoji: '🔀', keep: true, copies: 2,
     text: 'Intercambio forzoso. Cambia una de tus propiedades por la de otro jugador. No se negocia: el otro debe aceptar.',
     effect: { kind: 'force_swap' } },
-  { id: 'par-gran-premio', deck: 'bonificacion', pack: 'parada-libre', emoji: '🎰', copies: 2,
+  { id: 'par-gran-premio', deck: 'bonificacion', pack: 'parada-libre', emoji: '🎰', keep: true, copies: 2,
     text: 'Gran premio. Te llevas todo el dinero acumulado en la Parada Libre.',
     effect: { kind: 'pot_take', share: 1 } },
 ];
@@ -439,6 +440,8 @@ export function isAutomatic(e: CardEffect): boolean {
 export interface WheelFace {
   id: string;
   label: string;
+  /** Texto corto para escribirlo dentro del sector de la ruleta. */
+  short: string;
   emoji: string;
   /** rojo = pierdes dinero (va al bote); verde = premio. */
   tone: 'bad' | 'good';
@@ -446,17 +449,20 @@ export interface WheelFace {
 }
 
 export const WHEEL: WheelFace[] = [
-  { id: 'w-50', label: 'Pierdes {m}50', emoji: '💸', tone: 'bad', effect: { kind: 'pot_add', amount: 50 } },
-  { id: 'w-limo', label: 'La limusina: cambia tu ficha; las propiedades y la renta son gratis', emoji: '🚘', tone: 'good', effect: { kind: 'limo' } },
-  { id: 'w-100', label: 'Pierdes {m}100', emoji: '💸', tone: 'bad', effect: { kind: 'pot_add', amount: 100 } },
-  { id: 'w-casa', label: 'Casa gratis en cualquiera de tus propiedades', emoji: '🏠', tone: 'good', effect: { kind: 'free_house' } },
-  { id: 'w-150', label: 'Pierdes {m}150', emoji: '💸', tone: 'bad', effect: { kind: 'pot_add', amount: 150 } },
-  { id: 'w-compra', label: 'Compra 1 propiedad sin dueño', emoji: '🏘️', tone: 'good', effect: { kind: 'free_property' } },
-  { id: 'w-200', label: 'Pierdes {m}200', emoji: '💸', tone: 'bad', effect: { kind: 'pot_add', amount: 200 } },
-  { id: 'w-premio', label: '¡GRAN PREMIO! Te llevas todo el dinero acumulado', emoji: '🎰', tone: 'good', effect: { kind: 'pot_take', share: 1 } },
+  { id: 'w-50', short: '−{m}50', label: 'Pierdes {m}50', emoji: '💸', tone: 'bad', effect: { kind: 'pot_add', amount: 50 } },
+  { id: 'w-limo', short: 'LIMUSINA', label: 'La limusina: cambia tu ficha; las propiedades y la renta son gratis', emoji: '🚘', tone: 'good', effect: { kind: 'limo' } },
+  { id: 'w-100', short: '−{m}100', label: 'Pierdes {m}100', emoji: '💸', tone: 'bad', effect: { kind: 'pot_add', amount: 100 } },
+  { id: 'w-casa', short: 'CASA GRATIS', label: 'Casa gratis en cualquiera de tus propiedades', emoji: '🏠', tone: 'good', effect: { kind: 'free_house' } },
+  { id: 'w-150', short: '−{m}150', label: 'Pierdes {m}150', emoji: '💸', tone: 'bad', effect: { kind: 'pot_add', amount: 150 } },
+  { id: 'w-compra', short: 'PROPIEDAD', label: 'Compra 1 propiedad sin dueño', emoji: '🏘️', tone: 'good', effect: { kind: 'free_property' } },
+  { id: 'w-200', short: '−{m}200', label: 'Pierdes {m}200', emoji: '💸', tone: 'bad', effect: { kind: 'pot_add', amount: 200 } },
+  { id: 'w-premio', short: 'GRAN PREMIO', label: '¡GRAN PREMIO! Te llevas todo el dinero acumulado', emoji: '🎰', tone: 'good', effect: { kind: 'pot_take', share: 1 } },
 ];
 
 export const getWheelFace = (id: string): WheelFace | undefined => WHEEL.find((f) => f.id === id);
 
 /** Texto de una cara con el símbolo de moneda de la partida. */
 export const wheelText = (f: WheelFace, sym: string): string => f.label.replace(/\{m\}/g, sym);
+
+/** Etiqueta corta (la que va escrita en el sector). */
+export const wheelShort = (f: WheelFace, sym: string): string => f.short.replace(/\{m\}/g, sym);

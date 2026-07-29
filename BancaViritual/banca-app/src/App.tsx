@@ -3,7 +3,7 @@ import './App.css';
 import { PropertyCard } from './components/PropertyCard';
 import { WealthChart } from './components/WealthChart';
 import { BOARD, getProperty, GROUPS } from './domain/board';
-import { activeDecks, CARDS, cardText, DECKS, getCard, getWheelFace, isAutomatic, PACKS, packSize, WHEEL, wheelText, type DeckId } from './domain/cards';
+import { activeDecks, CARDS, cardText, DECKS, getCard, getWheelFace, isAutomatic, PACKS, packSize, WHEEL, wheelShort, wheelText, type DeckId } from './domain/cards';
 import {
   bankBuildingsLeft,
   createGame,
@@ -42,7 +42,8 @@ type Sheet =
   | { kind: 'settings' }
   | { kind: 'chart' }
   | { kind: 'board' }
-  | { kind: 'history' };
+  | { kind: 'history' }
+  | { kind: 'hand'; playerId: string };
 
 const PLAYER_COLOR = (i: number) => PLAYER_COLORS[i % PLAYER_COLORS.length];
 
@@ -85,6 +86,9 @@ export default function App() {
   const { state, act, undo, redo, reset, canUndo, canRedo } = useGame();
   const { meId, setMe, deviceId } = useIdentity(state.code);
   const [sheet, setSheet] = useState<Sheet>({ kind: 'none' });
+  // Oculta la carta/ruleta en ESTE dispositivo sin resolverla (sigue pendiente
+  // para todos). Evita que una carta que no puedes pagar bloquee la pantalla.
+  const [hiddenCard, setHiddenCard] = useState<string | null>(null);
 
   const sym = state.currencySymbol;
   const money = (n: number) => `${sym}${n.toLocaleString('es')}`;
@@ -270,17 +274,29 @@ export default function App() {
         <ParadaLibreBar state={state} act={act} money={money} me={me} canControl={canControl} />
       )}
 
-      {state.wheel && (
-        <WheelModal state={state} act={act} canAct={canControl(state.wheel.playerId)} />
+      {state.wheel && hiddenCard !== 'wheel' && (
+        <WheelModal
+          state={state}
+          act={act}
+          canAct={canControl(state.wheel.playerId)}
+          onHide={() => setHiddenCard('wheel')}
+        />
       )}
 
-      {state.drawnCard && (
+      {state.drawnCard && hiddenCard === state.drawnCard.cardId && (
+        <button className="pendingcard" onClick={() => setHiddenCard(null)}>
+          📩 Carta pendiente de {state.players.find((p) => p.id === state.drawnCard!.playerId)?.name} — ver
+        </button>
+      )}
+
+      {state.drawnCard && hiddenCard !== state.drawnCard.cardId && (
         <CardModal
           drawn={state.drawnCard}
           state={state}
           act={act}
           money={money}
           canAct={canControl(state.drawnCard.playerId)}
+          onHide={() => setHiddenCard(state.drawnCard!.cardId)}
         />
       )}
 
@@ -306,11 +322,9 @@ export default function App() {
             isSelf={me?.id === p.id}
             onOpen={(k) => setSheet({ kind: k, playerId: p.id })}
             onSalida={() => act({ type: 'SALIDA', playerId: p.id })}
-            onUseCard={(cardId) => act({ type: 'USE_CARD', playerId: p.id, cardId })}
             onJail={() => act({ type: 'GO_TO_JAIL', playerId: p.id })}
             onPayBail={() => act({ type: 'PAY_BAIL', playerId: p.id })}
             onLeaveJail={() => act({ type: 'LEAVE_JAIL', playerId: p.id })}
-            sym={state.currencySymbol}
             hasLimo={state.limoPlayerId === p.id}
             bailText={money(GAME_CONFIG.bail)}
             jailTurns={GAME_CONFIG.jailTurns}
@@ -341,8 +355,8 @@ export default function App() {
 }
 
 function PlayerTile({
-  p, money, isCurrent, canControl, canTrade, isSelf, onOpen, onSalida, onUseCard, onBankrupt,
-  onJail, onPayBail, onLeaveJail, sym, hasLimo, bailText, jailTurns,
+  p, money, isCurrent, canControl, canTrade, isSelf, onOpen, onSalida, onBankrupt,
+  onJail, onPayBail, onLeaveJail, hasLimo, bailText, jailTurns,
 }: {
   p: RuntimePlayer;
   money: (n: number) => string;
@@ -352,12 +366,10 @@ function PlayerTile({
   isSelf: boolean;
   onOpen: (k: Sheet['kind']) => void;
   onSalida: () => void;
-  onUseCard: (cardId: string) => void;
   onBankrupt: () => void;
   onJail: () => void;
   onPayBail: () => void;
   onLeaveJail: () => void;
-  sym: string;
   hasLimo: boolean;
   bailText: string;
   jailTurns: number;
@@ -368,7 +380,7 @@ function PlayerTile({
   return (
     <article className={`ptile ${isCurrent ? 'ptile--current' : ''} ${canControl ? '' : 'ptile--other'} ${p.bankrupt ? 'ptile--bankrupt' : ''}`} style={{ borderTopColor: color }}>
       <div className="ptile__head">
-        <span className="ptile__name">{p.icon} {p.name} {isCurrent && '⭐'} {p.admin && '🛡️'} {hasLimo && '🚘'} {p.jail > 0 && '🚔'} {p.bankrupt && '💀'}</span>
+        <span className="ptile__name">{p.icon} {p.name} {isCurrent && '⭐'} {p.admin && '🛡️'} {hasLimo && <span className="limo" title="Limusina dorada">🚗</span>} {p.jail > 0 && '🚔'} {p.bankrupt && '💀'}</span>
         {canControl && <button className="ptile__edit" title="Editar personaje" onClick={() => onOpen('edit')}>✏️</button>}
       </div>
       <div className="ptile__cash">{money(p.cash)}</div>
@@ -391,24 +403,12 @@ function PlayerTile({
         </div>
       )}
       {p.tokens.length > 0 && (
-        <div className="ptile__hand">
-          {p.tokens.map((cardId, i) => {
-            const c = getCard(cardId);
-            if (!c) return null;
-            return canControl ? (
-              <button
-                key={`${cardId}-${i}`}
-                className="ptile__card"
-                title={`Usar: ${cardText(c, sym)}`}
-                onClick={() => { if (confirm(`Usar esta carta?\n\n${cardText(c, sym)}`)) onUseCard(cardId); }}
-              >
-                {c.emoji} usar
-              </button>
-            ) : (
-              <span key={`${cardId}-${i}`} className="ptile__card ptile__card--ro" title={cardText(c, sym)}>{c.emoji}</span>
-            );
-          })}
-        </div>
+        <button className="ptile__hand" onClick={() => onOpen('hand')} title="Ver tus cartas y decidir cuándo usarlas">
+          {p.tokens.slice(0, 6).map((cardId, i) => (
+            <span key={`${cardId}-${i}`} className="ptile__card">{getCard(cardId)?.emoji ?? '🃏'}</span>
+          ))}
+          <span className="ptile__handmore">{p.tokens.length} carta{p.tokens.length > 1 ? 's' : ''} ›</span>
+        </button>
       )}
       <div className="ptile__btns">
         {canControl ? (
@@ -473,6 +473,10 @@ function SheetContent({
   const me = state.players.find((p) => p.id === sheet.playerId);
   if (!me) return null;
   const mine = canControl(me.id);
+
+  if (sheet.kind === 'hand') {
+    return <HandPanel me={me} act={act} sym={state.currencySymbol} readOnly={!mine} close={close} />;
+  }
 
   if (sheet.kind === 'edit') {
     return <PlayerEditPanel me={me} act={act} close={close} />;
@@ -678,6 +682,12 @@ function PropsPanel({
         <span>🏦 {money(playerEquity(me))} en bienes</span>
         <span>💎 {money(playerNetWorth(me))} total</span>
       </div>
+      {!readOnly && me.freeHouses > 0 && (
+        <p className="perk">🏠 Tienes <b>{me.freeHouses}</b> casa{me.freeHouses > 1 ? 's' : ''} gratis: elige abajo dónde colocarla{me.freeHouses > 1 ? 's' : ''}.</p>
+      )}
+      {!readOnly && me.freeProps > 0 && (
+        <p className="perk">🎁 Tienes <b>{me.freeProps}</b> propiedad{me.freeProps > 1 ? 'es' : ''} gratis: tómala en 🛒 Comprar propiedad.</p>
+      )}
       {!readOnly && <button className="confirm" onClick={goMarket}>🛒 Comprar propiedad</button>}
       <div className="ownedgrid">
         {me.holdings.length === 0 && <p className="hint">Aún no tiene propiedades.</p>}
@@ -716,9 +726,20 @@ function PropsPanel({
                 )}
                 {prop.isBuildable && (
                   <>
-                    <button disabled={!buildable || me.cash < prop.houseCost} onClick={() => act({ type: 'BUILD_HOUSE', playerId: me.id, propertyId: h.propertyId })}>
+                    <button disabled={!buildable || me.cash - prop.houseCost < 1} onClick={() => act({ type: 'BUILD_HOUSE', playerId: me.id, propertyId: h.propertyId })}>
                       +🏠 {money(prop.houseCost)}
                     </button>
+                    {/* Casa gratis pendiente: se coloca donde el jugador elija,
+                        saltándose grupo completo y construcción pareja. */}
+                    {me.freeHouses > 0 && !h.mortgaged && h.houses < 5 && (
+                      <button
+                        className="owned__free"
+                        title="Colocar aquí tu casa gratis (no necesitas el grupo completo)"
+                        onClick={() => act({ type: 'BUILD_HOUSE', playerId: me.id, propertyId: h.propertyId, free: true })}
+                      >
+                        +🏠 gratis
+                      </button>
+                    )}
                     <button disabled={!sellable} onClick={() => act({ type: 'SELL_HOUSE', playerId: me.id, propertyId: h.propertyId })}>
                       -🏠
                     </button>
@@ -758,21 +779,28 @@ function Market({
   );
   const available = BOARD.filter((p) => !ownedIds.has(p.id));
   const left = bankBuildingsLeft(state);
-  // La toma gratuita solo tiene sentido con Parada Libre en juego.
-  const freebie = state.settings.cardPacks.includes('parada-libre');
+  // "Gratis" aparece solo si el jugador tiene derecho AHORA: un crédito de
+  // "propiedad gratis" sin gastar, o la limusina dorada.
+  const withLimo = state.limoPlayerId === me.id;
+  const freebie = me.freeProps > 0 || withLimo;
 
   return (
     <div className="form">
       <h2>🛒 Comprar propiedad — {me.name}</h2>
       <p className="hint">Efectivo: {money(me.cash)} · Casas banco: {left.houses} · Hoteles: {left.hotels}</p>
-      {freebie && <p className="hint">🎁 <b>Gratis</b> aparece por la modalidad Parada Libre: úsalo solo si tienes la carta o el sector de la ruleta.</p>}
+      {freebie && (
+        <p className="hint">
+          🎁 Puedes quedarte una propiedad <b>gratis</b>
+          {withLimo ? ' mientras lleves la limusina dorada.' : ` (te quedan ${me.freeProps}).`}
+        </p>
+      )}
       <div className="market">
         {available.map((prop) => (
           <div key={prop.id} className="market__item">
             <PropertyCard property={prop} compact />
             <button
               className="buy"
-              disabled={me.cash < prop.price}
+              disabled={me.cash - prop.price < 1}
               onClick={() => { act({ type: 'BUY_PROPERTY', playerId: me.id, propertyId: prop.id }); }}
             >
               Comprar {money(prop.price)}
@@ -782,7 +810,7 @@ function Market({
               <button
                 className="market__free"
                 title="Usar tu carta de propiedad gratis: te la quedas sin pagar"
-                onClick={() => { act({ type: 'BUY_PROPERTY', playerId: me.id, propertyId: prop.id, price: 0 }); }}
+                onClick={() => { act({ type: 'BUY_PROPERTY', playerId: me.id, propertyId: prop.id, free: true }); close(); }}
               >
                 🎁 Gratis
               </button>
@@ -792,6 +820,49 @@ function Market({
         {available.length === 0 && <p className="hint">No quedan propiedades libres.</p>}
       </div>
       <button className="confirm" onClick={close}>Listo</button>
+    </div>
+  );
+}
+
+/**
+ * Cartas guardadas de un jugador: se ven enteras y se usan cuando él decide.
+ * Las de Bonificación se acumulan aquí en vez de aplicarse al robarlas.
+ */
+function HandPanel({ me, act, sym, readOnly, close }: {
+  me: RuntimePlayer;
+  act: ReturnType<typeof useGame>['act'];
+  sym: string;
+  readOnly: boolean;
+  close: () => void;
+}) {
+  return (
+    <div className="form">
+      <h2>🃏 Cartas de {me.name}</h2>
+      <p className="hint">
+        Guárdalas el tiempo que quieras y úsalas en el momento que te convenga.
+        También se pueden intercambiar en una negociación.
+      </p>
+      {me.tokens.length === 0 && <p className="hint">No tiene cartas guardadas.</p>}
+      <div className="hand">
+        {me.tokens.map((cardId, i) => {
+          const c = getCard(cardId);
+          if (!c) return null;
+          const deck = DECKS[c.deck];
+          return (
+            <article key={`${cardId}-${i}`} className="handcard" style={{ ['--deck-color' as string]: deck.color }}>
+              <header className="handcard__band">{deck.emoji} {deck.label}</header>
+              <div className="handcard__emoji">{c.emoji}</div>
+              <p className="handcard__text">{cardText(c, sym)}</p>
+              {!readOnly && (
+                <button className="confirm" onClick={() => { act({ type: 'USE_CARD', playerId: me.id, cardId }); }}>
+                  Usar ahora
+                </button>
+              )}
+            </article>
+          );
+        })}
+      </div>
+      <button className="confirm" onClick={close}>Cerrar</button>
     </div>
   );
 }
@@ -1049,15 +1120,15 @@ function ParadaLibreBar({ state, act, money, me, canControl }: {
             className="parada__take"
             disabled={state.pot <= 0}
             onClick={() => act({ type: 'POT_TAKE', playerId: turn.id })}
-            title="El jugador en turno se lleva el bote"
+            title="El jugador en turno se lleva el Gran Premio (todo el bote)"
           >
-            🎰 Cobrar
+            🎰 Gran Premio
           </button>
         </span>
       )}
 
-      <span className="parada__limo" title="La limusina dorada: propiedades libres gratis y no pagas renta">
-        🚘 {limo ? `${limo.icon} ${limo.name}` : '—'}
+      <span className={`parada__limo ${limo ? 'parada__limo--on' : ''}`} title="La limusina dorada: te quedas gratis las propiedades libres y no pagas renta">
+        <span className="limo">🚗</span> {limo ? `${limo.icon} ${limo.name}` : 'sin dueño'}
       </span>
       {me && (
         <button
@@ -1102,32 +1173,95 @@ function ParadaLibreBar({ state, act, money, me, canControl }: {
   );
 }
 
-/** Resultado de la ruleta, a pantalla completa para toda la sala. */
-function WheelModal({ state, act, canAct }: {
+/**
+ * Ruleta a pantalla completa: gira de verdad hasta dejar el sector ganador bajo
+ * el puntero. Los ocho sectores llevan escrito lo que dan.
+ */
+function WheelModal({ state, act, canAct, onHide }: {
   state: GameState;
   act: ReturnType<typeof useGame>['act'];
   canAct: boolean;
+  onHide: () => void;
 }) {
   const w = state.wheel!;
   const face = getWheelFace(w.faceId);
+  const idx = WHEEL.findIndex((f) => f.id === w.faceId);
   const player = state.players.find((p) => p.id === w.playerId);
+  const [spinning, setSpinning] = useState(true);
+
+  // Ángulo final: centra el sector ganador arriba (donde está el puntero),
+  // tras varias vueltas completas para que se vea el giro.
+  const seg = 360 / WHEEL.length;
+  const target = 360 * 5 - (idx * seg + seg / 2);
+
+  useEffect(() => {
+    setSpinning(true);
+    const t = setTimeout(() => setSpinning(false), 3200);
+    return () => clearTimeout(t);
+  }, [w.faceId, w.playerId]);
+
   if (!face || !player) return null;
   const good = face.tone === 'good';
+  const R = 130;
+
+  // Un sector = arco entre dos radios.
+  const sector = (i: number) => {
+    const a0 = ((i * seg - 90) * Math.PI) / 180;
+    const a1 = (((i + 1) * seg - 90) * Math.PI) / 180;
+    const x0 = 150 + R * Math.cos(a0), y0 = 150 + R * Math.sin(a0);
+    const x1 = 150 + R * Math.cos(a1), y1 = 150 + R * Math.sin(a1);
+    return `M150,150 L${x0.toFixed(1)},${y0.toFixed(1)} A${R},${R} 0 0 1 ${x1.toFixed(1)},${y1.toFixed(1)} Z`;
+  };
+
   return (
     <div className="overlay overlay--card">
       <div className="wheel" style={{ ['--tone' as string]: good ? '#16a34a' : '#dc2626' }}>
         <header className="wheel__band">🎡 LA RULETA</header>
-        <div className="wheel__dial">
-          {WHEEL.map((f) => (
-            <span key={f.id} className={`wheel__seg ${f.id === face.id ? 'wheel__seg--hit' : ''} ${f.tone === 'good' ? 'is-good' : 'is-bad'}`} />
-          ))}
-          <span className="wheel__emoji">{face.emoji}</span>
+
+        <div className="wheel__stage">
+          <span className="wheel__pointer" />
+          <svg
+            viewBox="0 0 300 300"
+            className={`wheel__svg ${spinning ? 'is-spinning' : ''}`}
+            style={{ ['--spin' as string]: `${target}deg` }}
+          >
+            {WHEEL.map((f, i) => {
+              const mid = ((i * seg + seg / 2 - 90) * Math.PI) / 180;
+              const tx = 150 + R * 0.66 * Math.cos(mid);
+              const ty = 150 + R * 0.66 * Math.sin(mid);
+              const rot = i * seg + seg / 2;
+              return (
+                <g key={f.id}>
+                  <path d={sector(i)} fill={f.tone === 'good' ? '#16a34a' : '#dc2626'} stroke="#0b1f17" strokeWidth="1.5" />
+                  <text
+                    x={tx} y={ty}
+                    transform={`rotate(${rot} ${tx} ${ty})`}
+                    textAnchor="middle" dominantBaseline="middle"
+                    fill="#fff" fontSize="13" fontWeight="700"
+                  >
+                    {wheelShort(f, state.currencySymbol)}
+                  </text>
+                </g>
+              );
+            })}
+            <circle cx="150" cy="150" r="26" fill="#0b1f17" stroke="#eab308" strokeWidth="3" />
+          </svg>
         </div>
-        <p className="wheel__text">{wheelText(face, state.currencySymbol)}</p>
-        <div className="wheel__who">{player.icon} <b>{player.name}</b> · +1 ⭐ tarjeta de Bonificación</div>
-        {canAct
-          ? <button className="confirm" onClick={() => act({ type: 'CLOSE_WHEEL' })}>Continuar</button>
-          : <p className="gcard__hint">Esperando a {player.name}…</p>}
+
+        {!spinning && (
+          <>
+            <p className="wheel__text">{face.emoji} {wheelText(face, state.currencySymbol)}</p>
+            <div className="wheel__who">{player.icon} <b>{player.name}</b> · +1 ⭐ tarjeta de Bonificación</div>
+          </>
+        )}
+        {spinning && <p className="wheel__text">Girando…</p>}
+
+        <div className="gcard__btns">
+          {canAct
+            ? <button className="confirm" disabled={spinning} onClick={() => act({ type: 'CLOSE_WHEEL' })}>Continuar</button>
+            : <p className="gcard__hint">Girando para {player.name}…</p>}
+          <button className="gcard__later" onClick={onHide}>Ocultar</button>
+        </div>
       </div>
     </div>
   );
@@ -1143,12 +1277,13 @@ function deckLeft(state: GameState, d: DeckId): number {
  * Carta robada, a pantalla completa y visible para toda la sala.
  * Solo quien controla al jugador puede resolverla.
  */
-function CardModal({ drawn, state, act, money, canAct }: {
+function CardModal({ drawn, state, act, money, canAct, onHide }: {
   drawn: NonNullable<GameState['drawnCard']>;
   state: GameState;
   act: ReturnType<typeof useGame>['act'];
   money: (n: number) => string;
   canAct: boolean;
+  onHide: () => void;
 }) {
   const card = getCard(drawn.cardId);
   const player = state.players.find((p) => p.id === drawn.playerId);
@@ -1166,13 +1301,23 @@ function CardModal({ drawn, state, act, money, canAct }: {
   if (e.kind === 'pay_each') action = `Pagar ${money(e.amount)} a cada uno`;
   if (card.keep) action = 'Guardar carta';
   if (e.kind === 'goto' && e.bonus) action = `Mover y cobrar ${money(e.bonus)}`;
+  let owed = 0; // lo que la carta le va a cobrar (para avisar si no le alcanza)
+  if (e.kind === 'bank_charge') owed = e.amount;
+  if (e.kind === 'pay_each') owed = e.amount * state.players.filter((p) => p.id !== player.id && !p.bankrupt).length;
+  if (e.kind === 'pay_percent') owed = Math.round((e.of === 'cash' ? player.cash : playerNetWorth(player)) * e.rate);
+  if (e.kind === 'pay_per_property') owed = player.holdings.length * e.amount;
+  if (e.kind === 'pay_richest') owed = e.amount;
   if (e.kind === 'repairs') {
     const b = playerBuildings(player);
     const total = b.houses * e.perHouse + b.hotels * e.perHotel;
+    owed = total;
     action = total > 0
       ? `Pagar ${money(total)} (${b.houses}🏠 · ${b.hotels}🏨)`
       : 'Sin construcciones: no pagas nada';
   }
+  // No le alcanza: el botón no haría nada. Hay que decirlo y dejarlo salir.
+  const short = owed > 0 && player.cash - owed < 1;
+  if (card.keep) action = 'Guardar carta';
 
   return (
     <div className="overlay overlay--card">
@@ -1184,6 +1329,13 @@ function CardModal({ drawn, state, act, money, canAct }: {
 
         {!auto && <p className="gcard__hint">Mueve tu ficha en el tablero. La app no cambia dinero por esta carta.</p>}
 
+        {short && (
+          <p className="gcard__warn">
+            ⚠️ No te alcanza: debes {money(owed)} y tienes {money(player.cash)}.
+            Cierra esta carta, hipoteca o vende algo, y vuelve a aplicarla desde <b>📩 Carta pendiente</b>.
+          </p>
+        )}
+
         {canAct ? (
           <div className="gcard__btns">
             {e.kind === 'goto' && e.collectGo && (
@@ -1191,10 +1343,15 @@ function CardModal({ drawn, state, act, money, canAct }: {
                 🟢 Pasé por SALIDA
               </button>
             )}
-            <button className="confirm" onClick={() => act({ type: 'RESOLVE_CARD' })}>{action}</button>
+            <button className="confirm" disabled={short} onClick={() => act({ type: 'RESOLVE_CARD' })}>{action}</button>
+            {/* Salida siempre disponible: si no, la carta bloquea la pantalla. */}
+            <button className="gcard__later" onClick={onHide}>Cerrar y resolver luego</button>
           </div>
         ) : (
-          <p className="gcard__hint">Esperando a {player.name}…</p>
+          <div className="gcard__btns">
+            <p className="gcard__hint">Esperando a {player.name}…</p>
+            <button className="gcard__later" onClick={onHide}>Ocultar</button>
+          </div>
         )}
       </div>
     </div>

@@ -51,7 +51,7 @@
   <!-- cinta de modalidad -->
   <path d="M0,444 h340 v36 a20,20 0 0 1 -20,20 h-300 a20,20 0 0 1 -20,-20 z" fill="#0e7490"/>
   <text x="20" y="468" class="pack">🅿️ PARADA LIBRE</text>
-  <text x="320" y="468" text-anchor="end" class="pack">AUTOMÁTICA</text>
+  <text x="320" y="468" text-anchor="end" class="pack">SE GUARDA</text>
   <text x="170" y="468" text-anchor="middle" class="pack">×3</text></g>
 <g transform="translate(388,24)">
   <!-- papel -->
@@ -86,7 +86,7 @@
   <!-- cinta de modalidad -->
   <path d="M0,444 h340 v36 a20,20 0 0 1 -20,20 h-300 a20,20 0 0 1 -20,-20 z" fill="#0e7490"/>
   <text x="20" y="468" class="pack">🅿️ PARADA LIBRE</text>
-  <text x="320" y="468" text-anchor="end" class="pack">AUTOMÁTICA</text>
+  <text x="320" y="468" text-anchor="end" class="pack">SE GUARDA</text>
   <text x="170" y="468" text-anchor="middle" class="pack">×2</text></g>
 <g transform="translate(752,24)">
   <!-- papel -->
@@ -123,7 +123,7 @@
   <!-- cinta de modalidad -->
   <path d="M0,444 h340 v36 a20,20 0 0 1 -20,20 h-300 a20,20 0 0 1 -20,-20 z" fill="#0e7490"/>
   <text x="20" y="468" class="pack">🅿️ PARADA LIBRE</text>
-  <text x="320" y="468" text-anchor="end" class="pack">MANUAL</text>
+  <text x="320" y="468" text-anchor="end" class="pack">SE GUARDA</text>
   <text x="170" y="468" text-anchor="middle" class="pack">×5</text></g>
 <g transform="translate(1116,24)">
   <!-- papel -->
