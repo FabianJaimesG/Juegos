@@ -256,6 +256,9 @@ export default function App() {
               // Bonificación no se roba en el turno: se reparte al empezar o al
               // caer en la Parada Libre, y va directo a la mano.
               .filter((d) => d !== 'bonificacion')
+              // En Parada Libre las cartas vienen de la ruleta/Bonificación:
+              // no se roban Fortuna ni Arca en el turno.
+              .filter((d) => !state.settings.cardPacks.includes('parada-libre') || (d !== 'arca' && d !== 'fortuna'))
               .map((d) => (
                 <button
                   key={d}
@@ -278,7 +281,7 @@ export default function App() {
       )}
 
       {state.settings.cardPacks.includes('parada-libre') && (
-        <ParadaLibreBar state={state} act={act} money={money} me={me} canControl={canControl} />
+        <ParadaLibreBar state={state} act={act} money={money} me={me} canControl={canControl} revealWheel={() => setHiddenCard(null)} />
       )}
 
       {winner && winnerSeen !== winner.id && (
@@ -1200,12 +1203,13 @@ function DiceView({ dice, onRoll, canRoll }: {
  * limusina dorada. El bote se alimenta a mano (impuestos, multas, ruleta)
  * porque la app no sabe en qué casilla cae cada ficha.
  */
-function ParadaLibreBar({ state, act, money, me, canControl }: {
+function ParadaLibreBar({ state, act, money, me, canControl, revealWheel }: {
   state: GameState;
   act: ReturnType<typeof useGame>['act'];
   money: (n: number) => string;
   me: RuntimePlayer | null;
   canControl: (pid: string) => boolean;
+  revealWheel: () => void;
 }) {
   const [amount, setAmount] = useState(100);
   const limo = state.players.find((p) => p.id === state.limoPlayerId) ?? null;
@@ -1270,9 +1274,13 @@ function ParadaLibreBar({ state, act, money, me, canControl }: {
       {me && (
         <button
           className="parada__spin"
-          disabled={me.spins <= 0 || !!state.wheel}
-          title={me.spins > 0 ? 'Gasta una ficha y gira la ruleta' : 'No te quedan fichas de giro'}
-          onClick={() => act({ type: 'SPIN_WHEEL', playerId: me.id })}
+          disabled={me.spins <= 0 || me.jail > 0}
+          title={
+            me.jail > 0 ? 'No puedes girar en la cárcel'
+              : me.spins > 0 ? 'Gasta una ficha y gira la ruleta'
+                : 'No te quedan fichas de giro'
+          }
+          onClick={() => { revealWheel(); act({ type: 'SPIN_WHEEL', playerId: me.id }); }}
         >
           🎡 Girar ({me.spins})
         </button>

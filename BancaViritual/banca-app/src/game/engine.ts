@@ -1118,10 +1118,12 @@ export function reducer(s: GameState, a: Action): GameState {
 
     case 'SPIN_WHEEL': {
       const p = s.players.find((x) => x.id === a.playerId);
-      if (!p || p.spins <= 0 || s.wheel) return s;
+      // Se puede girar mientras queden fichas y no se esté en la cárcel. Un giro
+      // nuevo reemplaza el resultado anterior en pantalla (no lo bloquea).
+      if (!p || p.spins <= 0 || p.jail > 0) return s;
       const face = WHEEL[Math.floor(Math.random() * WHEEL.length)];
       // Gasta la ficha de giro y aplica la cara. La carta de bonificación ya no
-      // se gana al girar: se obtiene al caer en Fortuna/Arca (botón dedicado).
+      // se gana al girar.
       const spun: GameState = {
         ...s,
         players: mapPlayer(s, p.id, (x) => ({ ...x, spins: x.spins - 1 })),

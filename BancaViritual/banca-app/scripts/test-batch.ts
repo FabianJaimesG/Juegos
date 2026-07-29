@@ -146,6 +146,15 @@ let gplSpun = reducer(gpl, { type: 'SPIN_WHEEL', playerId: anaPl });
 gplSpun = reducer(gplSpun, { type: 'CLOSE_WHEEL' });
 ok(handOf(gplSpun, anaPl) === handBeforeSpin, 'girar la ruleta NO agrega carta de bonificación');
 ok(gplSpun.players.find((p) => p.id === anaPl)!.spins === 0, 'girar gasta la ficha de giro');
+// Se puede volver a girar aunque quede un resultado en pantalla (wheel set).
+let gplMulti = { ...gpl, players: gpl.players.map((p) => (p.id === anaPl ? { ...p, spins: 2 } : p)) };
+gplMulti = reducer(gplMulti, { type: 'SPIN_WHEEL', playerId: anaPl });
+gplMulti = reducer(gplMulti, { type: 'SPIN_WHEEL', playerId: anaPl }); // sin cerrar el anterior
+ok(gplMulti.players.find((p) => p.id === anaPl)!.spins === 0, 'se puede girar de nuevo sin cerrar la ruleta');
+// En la cárcel no se puede girar.
+let gplJail = { ...gpl, players: gpl.players.map((p) => (p.id === anaPl ? { ...p, spins: 1, jail: 1 } : p)) };
+gplJail = reducer(gplJail, { type: 'SPIN_WHEEL', playerId: anaPl });
+ok(gplJail.players.find((p) => p.id === anaPl)!.spins === 1, 'en la cárcel no se gasta ficha (giro bloqueado)');
 
 console.log('9) Renta → ficha: se entrega a un dueño elegible (no al turno)');
 let grs = { ...gpl };
