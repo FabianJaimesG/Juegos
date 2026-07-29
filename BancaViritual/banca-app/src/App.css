@@ -540,3 +540,13 @@
 @media (prefers-reduced-motion: reduce) { .winner__cup { animation: none; } }
 .handcard__why { margin: 0.3rem 0.6rem 0; font-size: 0.72rem; color: #b45309; }
 .handcard .confirm:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* La cara de "elige un dado, el otro o la suma" tiene que verse */
+.turnbar__total--choose {
+  background: #fde68a; color: #78350f; border-radius: 8px;
+  padding: 0.1rem 0.5rem; letter-spacing: 0.02em;
+}
+.turnbar__sp {
+  font-weight: 600; color: #1f2937; background: #fde68a !important;
+  border: 1px solid #f59e0b;
+}

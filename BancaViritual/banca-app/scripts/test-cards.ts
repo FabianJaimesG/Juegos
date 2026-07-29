@@ -1,6 +1,6 @@
 // Verificación de las cartas (Arca Comunal / Fortuna). Ejecutar: npx tsx scripts/test-cards.ts
 import { activeDecks, CARDS, cardsFor, copiesOf, deckIds, getCard, isAutomatic, PACKS, packSize, WHEEL } from '../src/domain/cards';
-import { canCancelTrade, canRespondToTrade, canUseCard, createGame, reducer, whyCannotUseCard, winnerOf, type Action, type GameState } from '../src/game/engine';
+import { canCancelTrade, canRespondToTrade, canUseCard, createGame, diceSummary, reducer, whyCannotUseCard, winnerOf, type Action, type GameState } from '../src/game/engine';
 import { GAME_CONFIG } from '../src/domain/config';
 
 let pass = 0;
@@ -664,6 +664,39 @@ gAuto = turnos(gAuto);
 ok(gAuto.players.find((p) => p.id === ka)!.jail === 3, 'tercera: sigue preso');
 gAuto = turnos(gAuto);
 ok(gAuto.players.find((p) => p.id === ka)!.jail === 0, 'a la cuarta sale solo, sin tocar ningún botón');
+
+console.log('37) La cara de elegir sale y se muestra igual que se dice');
+// ¿Sale con la frecuencia que le toca? (1 de 6)
+let gDado = run(createGame('DADO'), { type: 'ADD_PLAYER', name: 'Ana' }, { type: 'START_GAME' });
+const N = 30000;
+let vecesElige = 0;
+for (let i = 0; i < N; i++) {
+  const r = reducer(gDado, { type: 'ROLL_DICE' });
+  if (r.dice!.specialId === 'choose') vecesElige++;
+}
+const pct = (100 * vecesElige) / N;
+ok(pct > 14 && pct < 19, `la cara de elegir sale ~1 de cada 6 (${pct.toFixed(1)} %)`);
+
+// Lo que se ve coincide con lo que se lee.
+const verYDecir = (faceIdx: number) => {
+  const real = Math.random;
+  let call = 0;
+  Math.random = () => (call++ < 2 ? [0.4, 0.6][call - 1] : faceIdx / 6);
+  try {
+    const r = reducer(gDado, { type: 'ROLL_DICE' });
+    return { dicho: r.log[0].text.replace('🎲 ', ''), visto: diceSummary(r.dice!) };
+  } finally { Math.random = real; }
+};
+const elige2 = verYDecir(2);
+ok(elige2.visto.text === '3 o 4 o 7', `en pantalla: x o y o z (${elige2.visto.text})`);
+ok(elige2.dicho === elige2.visto.text, 'y en voz se dice exactamente lo mismo');
+ok(elige2.visto.choose, 'queda marcada para destacarla');
+const dobles = verYDecir(0);
+ok(dobles.visto.text === '14' && dobles.dicho === '14', 'con dobles se ve y se dice el total ya doblado');
+const mas6 = verYDecir(1);
+ok(mas6.visto.text === '13' && mas6.dicho === '13', 'con +6 se ve y se dice el total con el bonus');
+const normal = diceSummary({ a: 3, b: 4, special: null });
+ok(normal.text === '7' && !normal.choose, 'sin cara especial, la suma a secas');
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} ok, ${fail} fallidas`);
 process.exit(fail === 0 ? 0 : 1);

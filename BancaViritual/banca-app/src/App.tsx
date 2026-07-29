@@ -9,6 +9,7 @@ import {
   canCancelTrade,
   canRespondToTrade,
   createGame,
+  diceSummary,
   whyCannotUseCard,
   winnerOf,
   type GameSettings,
@@ -1176,12 +1177,19 @@ function DiceView({ dice, onRoll, canRoll }: {
     <span className="turnbar__dice">
       <span className={`die ${rolling ? 'die--rolling' : ''}`}>{DICE_FACES[a - 1]}</span>
       <span className={`die ${rolling ? 'die--rolling' : ''}`}>{DICE_FACES[b - 1]}</span>
-      {!rolling && dice && (
-        <>
-          <span className="turnbar__total">= {dice.a + dice.b}</span>
-          {dice.special && <span className="turnbar__sp">{dice.special}</span>}
-        </>
-      )}
+      {!rolling && dice && (() => {
+        // Lo que se muestra es lo mismo que se dice: con dobles, el doble ya
+        // hecho; con +6, el total; y al elegir, "x o y o z" bien visible.
+        const out = diceSummary(dice);
+        return (
+          <>
+            <span className={`turnbar__total ${out.choose ? 'turnbar__total--choose' : ''}`}>
+              = {out.text}
+            </span>
+            {dice.special && <span className="turnbar__sp">{dice.special}</span>}
+          </>
+        );
+      })()}
       {canRoll && <button onClick={roll} disabled={rolling}>{rolling ? '…' : 'Tirar'}</button>}
     </span>
   );

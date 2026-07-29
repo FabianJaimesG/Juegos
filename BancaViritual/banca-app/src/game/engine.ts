@@ -82,7 +82,10 @@ export interface DrawnCard {
 export interface DiceRoll {
   a: number;
   b: number;
+  /** Etiqueta legible de la cara especial (o null). */
   special: string | null;
+  /** Id de la cara, para saber qué mostrar sin comparar textos. */
+  specialId?: string;
 }
 
 /** Propuesta de negociación pendiente de que B acepte o rechace. */
@@ -346,6 +349,17 @@ export function canCancelTrade(s: GameState, meId: string | null, isAdmin: boole
   if (meId === t.aId) return true;
   const proposer = s.players.find((p) => p.id === t.aId);
   return isAdmin && !proposer?.claimedBy;
+}
+
+/**
+ * Qué mostrar como resultado de la tirada: exactamente lo mismo que se anuncia
+ * en voz alta. `choose` marca la cara que deja elegir entre un dado, el otro o
+ * la suma, para destacarla en pantalla.
+ */
+export function diceSummary(d: DiceRoll): { text: string; choose: boolean } {
+  const face = d.specialId ? SPECIAL_FACES.find((f) => f.id === d.specialId) : null;
+  if (!face) return { text: `${d.a + d.b}`, choose: false };
+  return { text: face.say(d.a, d.b), choose: face.id === 'choose' };
 }
 
 /**
@@ -969,7 +983,11 @@ export function reducer(s: GameState, a: Action): GameState {
       // Se anuncia el resultado útil (cuánto mover), no "a + b = c":
       // los dados ya se ven en pantalla.
       const txt = `🎲 ${face ? face.say(a, b) : a + b}`;
-      return { ...s, dice: { a, b, special: face ? face.label : null }, log: log(s, txt) };
+      return {
+        ...s,
+        dice: { a, b, special: face ? face.label : null, specialId: face?.id },
+        log: log(s, txt),
+      };
     }
 
     case 'DRAW_CARD': {
