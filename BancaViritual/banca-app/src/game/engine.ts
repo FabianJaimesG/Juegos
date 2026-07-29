@@ -1137,7 +1137,9 @@ export function reducer(s: GameState, a: Action): GameState {
 
     case 'RENT_TO_SPIN': {
       const owner = s.players.find((x) => x.id === a.ownerId);
-      if (!owner) return s;
+      // El dueño de la propiedad donde cayó el jugador en turno recibe la ficha:
+      // debe estar jugando y tener alguna propiedad sin hipotecar.
+      if (!owner || owner.bankrupt || !owner.holdings.some((h) => !h.mortgaged)) return s;
       const max = s.settings.maxSpins;
       // Tope anti-abuso: sin él, dos jugadores pactan perdonarse la renta para
       // fabricar fichas gratis (el banco es una fuente infinita).
@@ -1145,7 +1147,7 @@ export function reducer(s: GameState, a: Action): GameState {
       return {
         ...s,
         players: mapPlayer(s, owner.id, (x) => ({ ...x, spins: x.spins + 1 })),
-        log: log(s, `${owner.name} perdonó la renta y tomó una ficha de giro 🎡`),
+        log: log(s, `${owner.name} recibió una ficha de giro 🎡 (renta perdonada)`),
       };
     }
 

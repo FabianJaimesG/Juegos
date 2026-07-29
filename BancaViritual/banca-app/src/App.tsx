@@ -1277,17 +1277,63 @@ function ParadaLibreBar({ state, act, money, me, canControl }: {
           🎡 Girar ({me.spins})
         </button>
       )}
-      {me && (
-        <button
-          className="parada__claim"
-          disabled={state.settings.maxSpins > 0 && me.spins >= state.settings.maxSpins}
-          title={`Perdonas la renta a quien cayó en tu propiedad y tomas una ficha de giro${state.settings.maxSpins > 0 ? ` (tope: ${state.settings.maxSpins})` : ''}`}
-          onClick={() => act({ type: 'RENT_TO_SPIN', ownerId: me.id })}
-        >
-          🤝 Renta → ficha
-        </button>
-      )}
+      {canAct && <RentToSpin state={state} act={act} turnName={turn.name} />}
     </div>
+  );
+}
+
+/**
+ * Acción del turno: el jugador cayó en una propiedad ajena y decidió no cobrar
+ * la renta. En vez de eso, entrega una ficha de giro 🎡 al DUEÑO de esa
+ * propiedad. Solo aparecen los dueños que están jugando, tienen alguna
+ * propiedad sin hipotecar y no superan el tope de fichas configurado.
+ */
+function RentToSpin({ state, act, turnName }: {
+  state: GameState;
+  act: ReturnType<typeof useGame>['act'];
+  turnName: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const max = state.settings.maxSpins;
+  const eligible = state.players.filter(
+    (p) =>
+      !p.bankrupt &&
+      p.holdings.some((h) => !h.mortgaged) &&
+      (max === 0 || p.spins < max),
+  );
+
+  return (
+    <span className="rent2spin">
+      <button
+        className="parada__claim"
+        disabled={eligible.length === 0}
+        title={
+          eligible.length === 0
+            ? 'Nadie puede recibir la ficha: sin propiedades sin hipotecar o ya llegaron al tope'
+            : `${turnName} cayó en una propiedad y no cobra la renta: entrega una ficha de giro a su dueño${max > 0 ? ` (tope: ${max})` : ''}`
+        }
+        onClick={() => setOpen((v) => !v)}
+      >
+        🤝 Renta → ficha ▾
+      </button>
+      {open && (
+        <span className="rent2spin__menu">
+          {eligible.map((p) => (
+            <button
+              key={p.id}
+              className="rent2spin__opt"
+              title={`Entregar una ficha de giro a ${p.name} (tiene ${p.spins})`}
+              onClick={() => {
+                act({ type: 'RENT_TO_SPIN', ownerId: p.id });
+                setOpen(false);
+              }}
+            >
+              {p.icon} {p.name} · 🎡 {p.spins}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
   );
 }
 

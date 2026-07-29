@@ -147,5 +147,23 @@ gplSpun = reducer(gplSpun, { type: 'CLOSE_WHEEL' });
 ok(handOf(gplSpun, anaPl) === handBeforeSpin, 'girar la ruleta NO agrega carta de bonificación');
 ok(gplSpun.players.find((p) => p.id === anaPl)!.spins === 0, 'girar gasta la ficha de giro');
 
+console.log('9) Renta → ficha: se entrega a un dueño elegible (no al turno)');
+let grs = { ...gpl };
+const [anaR, betoR] = grs.players.map((p) => p.id);
+const spinsOf = (s: GameState, id: string) => s.players.find((p) => p.id === id)!.spins;
+// Beto es dueño de una propiedad sin hipotecar → puede recibir la ficha.
+grs = { ...grs, players: grs.players.map((p) => (p.id === betoR ? { ...p, spins: 0 } : p)) };
+grs = reducer(setCash(grs, betoR, 5000), { type: 'BUY_PROPERTY', playerId: betoR, propertyId: 'oriental' });
+const betoSpinsBefore = spinsOf(grs, betoR);
+let grs2 = reducer(grs, { type: 'RENT_TO_SPIN', ownerId: betoR });
+ok(spinsOf(grs2, betoR) === betoSpinsBefore + 1, 'el dueño (Beto) recibe la ficha de giro');
+// Ana no tiene propiedades → no puede recibir.
+grs2 = reducer(grs, { type: 'RENT_TO_SPIN', ownerId: anaR });
+ok(spinsOf(grs2, anaR) === spinsOf(grs, anaR), 'sin propiedades sin hipotecar, no se entrega la ficha');
+// Con la propiedad hipotecada, tampoco.
+let grsM = reducer(grs, { type: 'MORTGAGE', playerId: betoR, propertyId: 'oriental' });
+const grsM2 = reducer(grsM, { type: 'RENT_TO_SPIN', ownerId: betoR });
+ok(spinsOf(grsM2, betoR) === spinsOf(grsM, betoR), 'con la única propiedad hipotecada, no se entrega la ficha');
+
 console.log(`\n${pass} ok, ${fail} fallos`);
 process.exit(fail ? 1 : 0);
