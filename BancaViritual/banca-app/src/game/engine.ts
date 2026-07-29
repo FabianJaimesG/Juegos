@@ -208,7 +208,7 @@ export type Action =
   | { type: 'FORCE_SWAP'; aId: string; bId: string; aProp: string; bProp: string }
   | { type: 'SPIN_WHEEL'; playerId: string } // gasta una ficha y gira la ruleta
   | { type: 'CLOSE_WHEEL' }
-  | { type: 'RENT_TO_SPIN'; ownerId: string } // perdonas la renta y cobras una ficha de giro
+  | { type: 'RENT_TO_SPIN'; fromId: string; toId: string } // el jugador en turno paga la renta con una de sus fichas de giro
   | { type: 'LAND_FREE_PARKING'; playerId: string } // caes en la casilla: bote + limusina + tarjeta
   | { type: 'GO_TO_JAIL'; playerId: string }
   | { type: 'PAY_BAIL'; playerId: string } // paga la fianza y sale
@@ -1147,20 +1147,25 @@ export function reducer(s: GameState, a: Action): GameState {
       return s.wheel ? { ...s, wheel: null } : s;
 
     case 'RENT_TO_SPIN': {
-      const owner = s.players.find((x) => x.id === a.ownerId);
-      // El dueño de la propiedad donde cayó el jugador en turno recibe la ficha:
-      // debe estar jugando y tener alguna propiedad sin hipotecar.
-      if (!owner || owner.bankrupt || !owner.holdings.some((h) => !h.mortgaged)) return s;
-      // El jugador en turno debió caer en la propiedad: en la cárcel no se mueve.
-      if (s.players[s.turnIndex]?.jail > 0) return s;
+      // El jugador en turno paga la renta con UNA de sus fichas de giro: se le
+      // descuenta a él y se le entrega al dueño seleccionado.
+      const from = s.players.find((x) => x.id === a.fromId); // jugador en turno que paga
+      const to = s.players.find((x) => x.id === a.toId);     // dueño que recibe
+      if (!from || !to || from.id === to.id) return s;
+      if (from.jail > 0 || from.spins <= 0) return s;        // en la cárcel no cae; y necesita una ficha
+      // El dueño debe estar jugando y tener propiedades.
+      if (to.bankrupt || to.holdings.length === 0) return s;
       const max = s.settings.maxSpins;
-      // Tope anti-abuso: sin él, dos jugadores pactan perdonarse la renta para
-      // fabricar fichas gratis (el banco es una fuente infinita).
-      if (max > 0 && owner.spins >= max) return s;
+      // Tope: el dueño no puede acumular más fichas de las permitidas.
+      if (max > 0 && to.spins >= max) return s;
       return {
         ...s,
-        players: mapPlayer(s, owner.id, (x) => ({ ...x, spins: x.spins + 1 })),
-        log: log(s, `${owner.name} recibió una ficha de giro 🎡 (renta perdonada)`),
+        players: s.players.map((x) => {
+          if (x.id === from.id) return { ...x, spins: x.spins - 1 };
+          if (x.id === to.id) return { ...x, spins: x.spins + 1 };
+          return x;
+        }),
+        log: log(s, `${from.name} pagó la renta con una ficha de giro 🎡 a ${to.name}`),
       };
     }
 

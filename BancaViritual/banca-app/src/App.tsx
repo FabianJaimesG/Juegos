@@ -308,6 +308,9 @@ export default function App() {
                 </button>
               ))}
           </span>
+          {state.settings.cardPacks.includes('parada-libre') && (
+            <RentToSpin state={state} act={act} payer={turnPlayer} canAct={myTurn} />
+          )}
           <span className="turnbar__btns">
             <button onClick={() => act({ type: 'NEXT_TURN' })} disabled={!myTurn} title={myTurn ? '' : 'Solo el jugador en turno puede pasar'}>
               {myTurn ? 'Siguiente turno →' : '🔒 Siguiente turno'}
@@ -1354,49 +1357,56 @@ function ParadaLibreBar({ state, act, money, me, canControl, revealWheel }: {
           🎡 Girar ({me.spins})
         </button>
       )}
-      {canAct && <RentToSpin state={state} act={act} turnName={turn.name} />}
     </div>
   );
 }
 
 /**
- * Acción del turno: el jugador cayó en una propiedad ajena y decidió no cobrar
- * la renta. En vez de eso, entrega una ficha de giro 🎡 al DUEÑO de esa
- * propiedad. Solo aparecen los dueños que están jugando, tienen alguna
- * propiedad sin hipotecar y no superan el tope de fichas configurado.
+ * Acción del turno (Parada Libre): el jugador en turno paga la renta con UNA de
+ * sus fichas de giro 🎡. Abre un panel con los jugadores que tienen propiedades
+ * y no superan el tope de fichas; al elegir uno, se le entrega una ficha y se
+ * descuenta al jugador en turno. Requiere que el jugador tenga fichas y no esté
+ * en la cárcel.
  */
-function RentToSpin({ state, act, turnName }: {
+function RentToSpin({ state, act, payer, canAct }: {
   state: GameState;
   act: ReturnType<typeof useGame>['act'];
-  turnName: string;
+  payer: RuntimePlayer;
+  canAct: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const max = state.settings.maxSpins;
-  const turnInJail = (state.players[state.turnIndex]?.jail ?? 0) > 0;
   const eligible = state.players.filter(
     (p) =>
+      p.id !== payer.id &&
       !p.bankrupt &&
-      p.holdings.some((h) => !h.mortgaged) &&
+      p.holdings.length > 0 &&
       (max === 0 || p.spins < max),
   );
+  const noSpins = payer.spins <= 0;
+  const inJail = payer.jail > 0;
+  const blocked = !canAct || noSpins || inJail || eligible.length === 0;
+  const title = !canAct
+    ? 'Solo el jugador en turno puede pagar con ficha'
+    : inJail
+      ? 'En la cárcel no caes en propiedades'
+      : noSpins
+        ? 'No tienes fichas de giro para pagar'
+        : eligible.length === 0
+          ? 'Ningún jugador con propiedades puede recibir la ficha (o llegaron al tope)'
+          : `Paga la renta con una de tus fichas 🎡 al dueño de la propiedad${max > 0 ? ` (tope: ${max})` : ''}`;
 
   return (
     <span className="rent2spin">
       <button
-        className="parada__claim"
-        disabled={eligible.length === 0 || turnInJail}
-        title={
-          turnInJail
-            ? 'En la cárcel no caes en propiedades: no hay renta que perdonar'
-            : eligible.length === 0
-              ? 'Nadie puede recibir la ficha: sin propiedades sin hipotecar o ya llegaron al tope'
-              : `${turnName} cayó en una propiedad y no cobra la renta: entrega una ficha de giro a su dueño${max > 0 ? ` (tope: ${max})` : ''}`
-        }
+        className="rent2spin__btn"
+        disabled={blocked}
+        title={title}
         onClick={() => setOpen((v) => !v)}
       >
-        🤝 Renta → ficha ▾
+        🎡 Pagar renta con ficha ({payer.spins}) ▾
       </button>
-      {open && (
+      {open && !blocked && (
         <span className="rent2spin__menu">
           {eligible.map((p) => (
             <button
@@ -1404,7 +1414,7 @@ function RentToSpin({ state, act, turnName }: {
               className="rent2spin__opt"
               title={`Entregar una ficha de giro a ${p.name} (tiene ${p.spins})`}
               onClick={() => {
-                act({ type: 'RENT_TO_SPIN', ownerId: p.id });
+                act({ type: 'RENT_TO_SPIN', fromId: payer.id, toId: p.id });
                 setOpen(false);
               }}
             >

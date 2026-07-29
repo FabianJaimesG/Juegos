@@ -156,23 +156,27 @@ let gplJail = { ...gpl, players: gpl.players.map((p) => (p.id === anaPl ? { ...p
 gplJail = reducer(gplJail, { type: 'SPIN_WHEEL', playerId: anaPl });
 ok(gplJail.players.find((p) => p.id === anaPl)!.spins === 1, 'en la cárcel no se gasta ficha (giro bloqueado)');
 
-console.log('9) Renta → ficha: se entrega a un dueño elegible (no al turno)');
+console.log('9) Renta → ficha: el turno paga con SU ficha al dueño elegido');
 let grs = { ...gpl };
 const [anaR, betoR] = grs.players.map((p) => p.id);
 const spinsOf = (s: GameState, id: string) => s.players.find((p) => p.id === id)!.spins;
-// Beto es dueño de una propiedad sin hipotecar → puede recibir la ficha.
-grs = { ...grs, players: grs.players.map((p) => (p.id === betoR ? { ...p, spins: 0 } : p)) };
+// Ana (paga) con 2 fichas; Beto (recibe) dueño de una propiedad con 0 fichas.
+grs = { ...grs, players: grs.players.map((p) => (p.id === anaR ? { ...p, spins: 2 } : p.id === betoR ? { ...p, spins: 0 } : p)) };
 grs = reducer(setCash(grs, betoR, 5000), { type: 'BUY_PROPERTY', playerId: betoR, propertyId: 'oriental' });
-const betoSpinsBefore = spinsOf(grs, betoR);
-let grs2 = reducer(grs, { type: 'RENT_TO_SPIN', ownerId: betoR });
-ok(spinsOf(grs2, betoR) === betoSpinsBefore + 1, 'el dueño (Beto) recibe la ficha de giro');
-// Ana no tiene propiedades → no puede recibir.
-grs2 = reducer(grs, { type: 'RENT_TO_SPIN', ownerId: anaR });
-ok(spinsOf(grs2, anaR) === spinsOf(grs, anaR), 'sin propiedades sin hipotecar, no se entrega la ficha');
-// Con la propiedad hipotecada, tampoco.
-let grsM = reducer(grs, { type: 'MORTGAGE', playerId: betoR, propertyId: 'oriental' });
-const grsM2 = reducer(grsM, { type: 'RENT_TO_SPIN', ownerId: betoR });
-ok(spinsOf(grsM2, betoR) === spinsOf(grsM, betoR), 'con la única propiedad hipotecada, no se entrega la ficha');
+let grs2 = reducer(grs, { type: 'RENT_TO_SPIN', fromId: anaR, toId: betoR });
+ok(spinsOf(grs2, betoR) === 1 && spinsOf(grs2, anaR) === 1, 'Beto recibe la ficha y a Ana se le descuenta');
+// Ana sin fichas → no puede pagar.
+let grsNo = { ...grs, players: grs.players.map((p) => (p.id === anaR ? { ...p, spins: 0 } : p)) };
+grsNo = reducer(grsNo, { type: 'RENT_TO_SPIN', fromId: anaR, toId: betoR });
+ok(spinsOf(grsNo, betoR) === 0, 'sin fichas de giro, el jugador en turno no puede pagar');
+// Ana en la cárcel → no puede pagar.
+let grsJail = { ...grs, players: grs.players.map((p) => (p.id === anaR ? { ...p, jail: 1 } : p)) };
+grsJail = reducer(grsJail, { type: 'RENT_TO_SPIN', fromId: anaR, toId: betoR });
+ok(spinsOf(grsJail, betoR) === 0 && spinsOf(grsJail, anaR) === 2, 'en la cárcel no se paga con ficha');
+// Tope: si Beto ya está en el tope, no recibe más.
+let grsCap = { ...grs, settings: { ...grs.settings, maxSpins: 1 }, players: grs.players.map((p) => (p.id === betoR ? { ...p, spins: 1 } : p)) };
+grsCap = reducer(grsCap, { type: 'RENT_TO_SPIN', fromId: anaR, toId: betoR });
+ok(spinsOf(grsCap, betoR) === 1, 'el dueño en el tope no recibe otra ficha');
 
 console.log('10) En la cárcel no se roban cartas de Fortuna/Arca');
 let gj = createGame('JAIL');
@@ -212,9 +216,9 @@ let gcr = setCash(gc, betoC, 3000);
 gcr = reducer(gcr, { type: 'BUY_PROPERTY', playerId: betoC, propertyId: 'oriental' });
 const anaCashBefore = gcr.players.find((p) => p.id === anaC)!.cash;
 ok(reducer(gcr, { type: 'PAY_RENT', fromId: anaC, toId: betoC, propertyId: 'oriental' }).players.find((p) => p.id === anaC)!.cash === anaCashBefore, 'pagar renta bloqueado si el pagador está en la cárcel');
-// RENT_TO_SPIN bloqueado si el jugador en turno (Ana, turnIndex 0) está en la cárcel
+// RENT_TO_SPIN bloqueado si el pagador (Ana, en la cárcel) intenta pagar con ficha
 gcr = { ...gcr, players: gcr.players.map((p) => (p.id === betoC ? { ...p, spins: 0 } : p)) };
-ok(reducer(gcr, { type: 'RENT_TO_SPIN', ownerId: betoC }).players.find((p) => p.id === betoC)!.spins === 0, 'renta→ficha bloqueado si el jugador en turno está en la cárcel');
+ok(reducer(gcr, { type: 'RENT_TO_SPIN', fromId: anaC, toId: betoC }).players.find((p) => p.id === betoC)!.spins === 0, 'renta→ficha bloqueado si el pagador está en la cárcel');
 
 console.log(`\n${pass} ok, ${fail} fallos`);
 process.exit(fail ? 1 : 0);
