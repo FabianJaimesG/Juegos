@@ -226,17 +226,24 @@ export type Action =
  */
 interface SpecialFace {
   id: string;
+  /** Cara del "tercer dado" que se ve en la animación y el resultado. */
+  emoji: string;
   label: string;
   say: (a: number, b: number) => string;
 }
 const SPECIAL_FACES: SpecialFace[] = [
-  { id: 'x2', label: '✖️ dobles (mueve el doble)', say: (a, b) => `${(a + b) * 2}` },
-  { id: 'bonus6', label: '➕6 bonus', say: (a, b) => `${a + b + 6}` },
-  { id: 'choose', label: '🎲 elige: un dado, el otro o ambos', say: (a, b) => `${a} o ${b} o ${a + b}` },
-  { id: 'reroll', label: '🔁 relanza', say: (a, b) => `${a + b}, relanza` },
-  { id: 'skip', label: '🚫 pierde turno', say: (a, b) => `${a + b}, pierde turno` },
-  { id: 'next', label: '🏠 avanza a la siguiente propiedad', say: (a, b) => `${a + b}, avanza a la siguiente propiedad` },
+  { id: 'x2', emoji: '✖️', label: '✖️ dobles (mueve el doble)', say: (a, b) => `${(a + b) * 2}` },
+  { id: 'bonus6', emoji: '⚅', label: '⚅ +6 bonus', say: (a, b) => `${a + b + 6}` },
+  { id: 'choose', emoji: '🔀', label: '🔀 elige: un dado, el otro o ambos', say: (a, b) => `${a} o ${b} o ${a + b}` },
+  { id: 'reroll', emoji: '🔄', label: '🔄 relanza', say: (a, b) => `${a + b}, relanza` },
+  { id: 'skip', emoji: '🚫', label: '🚫 pierde turno', say: (a, b) => `${a + b}, pierde turno` },
+  { id: 'next', emoji: '🏠', label: '🏠 avanza a la siguiente propiedad', say: (a, b) => `${a + b}, avanza a la siguiente propiedad` },
 ];
+/** Todas las caras del dado especial (para animar el "tercer dado" al tirar). */
+export const SPECIAL_DIE_EMOJIS: string[] = SPECIAL_FACES.map((f) => f.emoji);
+/** Emoji de la cara especial resuelta (o null si no hubo dado especial). */
+export const specialEmoji = (id?: string): string | null =>
+  SPECIAL_FACES.find((f) => f.id === id)?.emoji ?? null;
 const d6 = () => Math.floor(Math.random() * 6) + 1;
 
 let counter = 0;

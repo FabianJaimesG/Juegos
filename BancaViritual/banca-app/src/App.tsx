@@ -23,6 +23,8 @@ import {
   playerEquity,
   playerNetWorth,
   type RuntimePlayer,
+  SPECIAL_DIE_EMOJIS,
+  specialEmoji,
 } from './game/engine';
 import { canBuildOn, canSellOn } from './domain/wealth';
 import { GAME_CONFIG } from './domain/config';
@@ -86,6 +88,26 @@ function holdingSortKey(propertyId: string): number {
   if (p.kind === 'railroad') return -2000 + p.def.boardIndex;
   if (p.kind === 'utility') return -1000 + p.def.boardIndex;
   return p.def.boardIndex;
+}
+
+/**
+ * Marco decorativo estilo tablero (barras arcoíris + oro y emblemas en las
+ * esquinas). Es fijo y `pointer-events:none`, así que nunca bloquea la
+ * interacción; el contenido lleva margen suficiente para no quedar debajo.
+ */
+function BoardFrame() {
+  return (
+    <div className="boardframe" aria-hidden>
+      <span className="boardframe__bar boardframe__bar--top" />
+      <span className="boardframe__bar boardframe__bar--bottom" />
+      <span className="boardframe__bar boardframe__bar--left" />
+      <span className="boardframe__bar boardframe__bar--right" />
+      <span className="boardframe__corner boardframe__corner--tl">🎩</span>
+      <span className="boardframe__corner boardframe__corner--tr">❓</span>
+      <span className="boardframe__corner boardframe__corner--bl">🚂</span>
+      <span className="boardframe__corner boardframe__corner--br">🏠</span>
+    </div>
+  );
 }
 
 export default function App() {
@@ -223,6 +245,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <BoardFrame />
       <header className="topbar">
         <h1>
           🏦 Banca <span className="code">{hasSupabase ? '🟢' : '⚪'} Sala {state.code}</span>
@@ -250,7 +273,7 @@ export default function App() {
       {turnPlayer && (
         <div className="turnbar" style={{ ['--pc' as string]: PLAYER_COLOR(turnPlayer.colorIndex) }}>
           <span className="turnbar__who">Turno: <b>{turnPlayer.icon} {turnPlayer.name}</b>{myTurn && ' (tú)'}</span>
-          {state.settings.dice && <DiceView dice={state.dice} onRoll={() => act({ type: 'ROLL_DICE' })} canRoll={myTurn} />}
+          {state.settings.dice && <DiceView dice={state.dice} onRoll={() => act({ type: 'ROLL_DICE' })} canRoll={myTurn} special={state.settings.special} />}
           <span className="turnbar__decks">
             {activeDecks(state.settings.cardPacks)
               // Bonificación no se roba en el turno: se reparte al empezar o al
@@ -1166,30 +1189,52 @@ function CharacterPicker({ icon, colorIndex, onIcon, onColor }: {
   );
 }
 
-function DiceView({ dice, onRoll, canRoll }: {
-  dice: { a: number; b: number; special: string | null } | null;
+function DiceView({ dice, onRoll, canRoll, special }: {
+  dice: { a: number; b: number; special: string | null; specialId?: string } | null;
   onRoll: () => void;
   canRoll: boolean;
+  special: boolean;
 }) {
   const [rolling, setRolling] = useState(false);
+  const [reveal, setReveal] = useState(false);
   const [faces, setFaces] = useState<[number, number]>([1, 1]);
+  const [spIdx, setSpIdx] = useState(0);
   const roll = () => {
     if (rolling || !canRoll) return;
     setRolling(true);
+    setReveal(false);
     // Tirada más larga y visible antes de mostrar el resultado.
-    const iv = setInterval(() => setFaces([rand6(), rand6()]), 70);
+    const iv = setInterval(() => {
+      setFaces([rand6(), rand6()]);
+      setSpIdx(Math.floor(Math.random() * SPECIAL_DIE_EMOJIS.length));
+    }, 70);
     setTimeout(() => {
       clearInterval(iv);
       setRolling(false);
       onRoll();
+      // Muestra el resultado en grande y centrado un instante, luego se cierra.
+      setReveal(true);
+      setTimeout(() => setReveal(false), 900);
     }, 1100);
   };
   const a = rolling ? faces[0] : dice?.a ?? 1;
   const b = rolling ? faces[1] : dice?.b ?? 1;
+  // Cara del dado especial: cicla al tirar; al parar, la resuelta.
+  const spEmoji = rolling ? SPECIAL_DIE_EMOJIS[spIdx] : (specialEmoji(dice?.specialId) ?? '🎲');
   return (
     <span className="turnbar__dice">
+      {(rolling || reveal) && (
+        // Overlay gigante y centrado de la tirada. No bloquea (pointer-events:none)
+        // y desaparece solo, así que no estorba la jugabilidad.
+        <div className={`diceroll ${reveal ? 'diceroll--reveal' : ''}`} aria-hidden>
+          <span className="diceroll__die">{DICE_FACES[a - 1]}</span>
+          <span className="diceroll__die">{DICE_FACES[b - 1]}</span>
+          {special && <span className="diceroll__die diceroll__die--sp">{spEmoji}</span>}
+        </div>
+      )}
       <span className={`die ${rolling ? 'die--rolling' : ''}`}>{DICE_FACES[a - 1]}</span>
       <span className={`die ${rolling ? 'die--rolling' : ''}`}>{DICE_FACES[b - 1]}</span>
+      {special && <span className={`die die--special ${rolling ? 'die--rolling' : ''}`}>{spEmoji}</span>}
       {!rolling && dice && (() => {
         // Lo que se muestra es lo mismo que se dice: con dobles, el doble ya
         // hecho; con +6, el total; y al elegir, "x o y o z" bien visible.
