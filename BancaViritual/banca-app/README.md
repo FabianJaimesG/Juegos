@@ -30,6 +30,7 @@ npm install            # instalar dependencias
 npm run dev            # servidor de desarrollo (Vite)
 npm run build          # typecheck (tsc) + build de producción
 npm run preview        # previsualizar el build
+npm test               # pruebas de reglas y de cartas (sin dependencias)
 
 # Base de datos (Prisma → Supabase Postgres)
 npx prisma validate    # validar el esquema
@@ -73,11 +74,42 @@ Toda la configuración editable vive en dos archivos. **No hace falta tocar cód
   servicios `[×4, ×10]`.
 - **Costo de casa por grupo de color** (50/100/150/200) y color visual: en `GROUPS`.
 
+### 3. Cartas (Arca Comunal / Fortuna) → `src/domain/cards.ts`
+
+- Las 32 cartas clásicas están en `CARDS`, con `pack: 'base'`.
+- **Añadir una modalidad de juego** (prisión, parada libre, todo en venta…): agrega
+  cartas con otro `pack` y registra la modalidad en `PACKS`. Aparece sola en el panel
+  de la pantalla de preparación, donde se elige qué mazos usar en la partida.
+- Cada carta declara un `effect`. Los efectos **liquidables** (`bank_pay`, `bank_charge`,
+  `collect_each`, `pay_each`, `repairs`, `pot_add`, `pot_take`, `limo`…) los aplica el motor
+  solo; los **instructivos** (`goto`, `move_back`, `to_jail`, `nearest`, `manual`…) solo
+  muestran el texto, porque la app no rastrea la posición de las fichas en el tablero físico.
+- `keep: true` marca las cartas que **se guardan en la mano** en vez de descartarse
+  (salir de la cárcel, exención de renta, renta doble). Se usan con `USE_CARD`.
+- `copies` define cuántas veces entra una carta al mazo (balance).
+- Si una modalidad necesita un efecto que no existe, se añade una variante a
+  `CardEffect` y su caso en `actionFor()` (`src/game/engine.ts`).
+- En los textos, `{m}` se reemplaza por el símbolo de moneda de la partida.
+
+### 4. Ruleta y modalidad Parada Libre → `src/domain/cards.ts`
+
+- `WHEEL`: los 8 sectores (4 de castigo, 4 de premio). Reutilizan `CardEffect`.
+- Girar cuesta **1 ficha de giro** y entrega **1 ficha de bonificación** (regla de la caja:
+  "toma una tarjeta de Bonificación cada vez que gires").
+- Con la modalidad activa, **todo pago al banco** (`PLAYER_TO_BANK`: multas, impuestos,
+  cartas) alimenta el bote. Las compras y construcciones NO.
+- `settings.maxSpins` (por defecto 3) topa las fichas obtenidas perdonando rentas: sin
+  tope, dos jugadores pueden pactar no cobrarse para fabricar fichas gratis del banco.
+- Balance del mazo de Bonificación: 24 cartas vía `copies` por carta.
+
 ### Tras cambiar valores
 
 ```bash
 npm run db:seed     # vuelca board.ts a la BD (propiedades)
 npm run gen:cards   # regenera las tarjetas SVG de public/properties/
+npm run gen:cardart # regenera el arte de las cartas en public/cards/
+
+npx tsx scripts/enable-cards-rls.ts   # lectura pública de la tabla Card (una vez)
 ```
 
 ## 📐 Reglas de negociación / hipoteca (acordadas)
@@ -100,5 +132,10 @@ npm run gen:cards   # regenera las tarjetas SVG de public/properties/
 6. ✅ **Sincronización en vivo**: tabla `Room` (JSON) + Supabase Realtime. Crear/unirse a sala,
    enlace de invitación (`?room=`), recuperación de quien entra tarde. Habilitar con
    `npx tsx scripts/enable-realtime.ts` (ya ejecutado).
-7. ⏳ Portar extras del banquero original: dados/turnos, sonido, voz, gráfico de patrimonio.
-8. ⏳ Desplegar en GitHub Pages / Vercel (build estático) y probar entre dispositivos reales.
+7. ✅ Cartas: 71 en 6 modalidades (`cards.ts`), mazos Arca/Fortuna/Bonificación, arte SVG propio,
+   panel de modalidades, y tabla `Card` sembrada en Supabase.
+8. ✅ Expansión **Parada Libre**: bote acumulado, limusina dorada, ruleta de 8 sectores, fichas
+   de giro/bonificación (negociables) y canje renta→ficha con tope anti-alianzas.
+9. ✅ Expansión **Prisión**: estado de cárcel, fianza, condena por turnos e indultos.
+10. ⏳ Portar extras del banquero original: dados/turnos, sonido, voz, gráfico de patrimonio.
+11. ⏳ Desplegar en GitHub Pages / Vercel (build estático) y probar entre dispositivos reales.

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="340" height="500" viewBox="0 0 340 500" font-family="'Oswald','Futura','Avenir Next',system-ui,sans-serif">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fdfaf3"/><stop offset="1" stop-color="#efe7d6"/>
+    </linearGradient>
+    <pattern id="guilloche" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+      <path d="M0,8 q4,-8 8,0 t8,0" fill="none" stroke="#2f6f4e" stroke-width=".45" opacity=".22"/>
+    </pattern>
+  </defs>
+  <style>
+    .deck{fill:#f4efe4;font-size:21px;font-weight:700;letter-spacing:3px}
+    .brand{fill:#f4efe4;font-size:9px;letter-spacing:2.4px;opacity:.75}
+    .icon{font-size:38px}
+    .body{fill:#1b2f26;font-size:16px}
+    .pack{fill:#fdfaf3;font-size:10px;font-weight:700;letter-spacing:1.6px}
+  </style>
+
+  <!-- papel -->
+  <rect x="0" y="0" width="340" height="500" rx="20" fill="url(#paper)"/>
+  <rect x="0" y="0" width="340" height="500" rx="20" fill="url(#guilloche)" opacity=".5"/>
+
+  <!-- cabecera del mazo -->
+  <path d="M0,20 a20,20 0 0 1 20,-20 h300 a20,20 0 0 1 20,20 v66 h-340 z" fill="#7cc6e8"/>
+  <path d="M0,80 h340 v6 h-340 z" fill="#12211b" opacity=".18"/>
+  <text x="170" y="40" text-anchor="middle" class="deck">ARCA COMUNAL</text>
+  <text x="170" y="64" text-anchor="middle" class="brand">BANCA · CARTA DE JUEGO</text>
+
+  <!-- marco interior -->
+  <path d="M32,100 H308 L324,116 V414 L308,430 H32 L16,414 V116 Z" fill="none" stroke="#1f3d31" stroke-width="1.6" opacity=".55"/>
+  <path d="M34,106 H306 L318,118 V412 L306,424 H34 L22,412 V118 Z" fill="none" stroke="#1f3d31" stroke-width=".7" opacity=".35"/>
+
+  <!-- sello troquelado con el icono -->
+  <circle cx="170" cy="176" r="42" fill="none" stroke="#2f6f4e" stroke-width="2" opacity=".8"/>
+  <circle cx="170" cy="176" r="36" fill="#2f6f4e" opacity=".1"/>
+  <circle cx="170" cy="176" r="36" fill="none" stroke="#2f6f4e" stroke-width=".8" stroke-dasharray="2 4" opacity=".7"/>
+  <text x="170" y="192" text-anchor="middle" class="icon">🚧</text>
+
+  <!-- filetes -->
+  <line x1="60" y1="238" x2="280" y2="238" stroke="#1f3d31" stroke-width="1" opacity=".3"/>
+  <circle cx="170" cy="238" r="3" fill="#2f6f4e" opacity=".8"/>
+
+  <!-- texto de la carta -->
+  <text x="170" y="310" text-anchor="middle" class="body">Por reparación vial le</text>
+  <text x="170" y="332" text-anchor="middle" class="body">cobran: $40 por casa, $115</text>
+  <text x="170" y="354" text-anchor="middle" class="body">por hotel.</text>
+
+  <!-- cinta de modalidad -->
+  <path d="M0,444 h340 v36 a20,20 0 0 1 -20,20 h-300 a20,20 0 0 1 -20,-20 z" fill="#2f6f4e"/>
+  <text x="20" y="468" class="pack">🎩 CLÁSICO</text>
+  <text x="320" y="468" text-anchor="end" class="pack">AUTOMÁTICA</text>
+  
+</svg>

@@ -1,5 +1,6 @@
 // Motor de juego (puro): estado + acciones. Reutiliza el dominio (board/wealth/config).
 import { getProperty } from '../domain/board';
+import { cardText, deckIds, getCard, WHEEL, wheelText, type CardEffect, type DeckId } from '../domain/cards';
 import { GAME_CONFIG } from '../domain/config';
 import type { Holding, PlayerHoldings } from '../domain/wealth';
 import {
@@ -23,6 +24,14 @@ export interface RuntimePlayer {
   cash: number;
   bankrupt: boolean;
   holdings: Holding[];
+  /** Cartas guardadas en mano (cualquier carta con `keep`). Son negociables. */
+  tokens: string[];
+  /** Parada Libre: fichas para girar la ruleta. */
+  spins: number;
+  /** Parada Libre: fichas para robar del mazo de Bonificación. */
+  bonus: number;
+  /** Prisión: turnos que lleva encerrado. 0 = libre. */
+  jail: number;
   /** Administrador: su dispositivo puede operar a todos los jugadores. */
   admin: boolean;
   /** Id del dispositivo que "reclamó" a este jugador (para no robar identidades). */
@@ -44,6 +53,26 @@ export interface GameSettings {
   initialBalance: number;
   /** Construcción/venta pareja de casas (regla clásica de uniformidad). */
   evenBuild: boolean;
+  /** Modalidades de cartas activas (ids de `PACKS`). 'base' = las 32 clásicas. */
+  cardPacks: string[];
+  /**
+   * Parada Libre: tope de fichas de giro que un jugador puede acumular.
+   * Evita que dos jugadores pacten perdonarse la renta indefinidamente para
+   * fabricar fichas gratis del banco. 0 = sin tope.
+   */
+  maxSpins: number;
+}
+
+/** Mazo barajado: `draw` se consume por el frente; al agotarse se rebaraja `discard`. */
+export interface DeckState {
+  draw: string[];
+  discard: string[];
+}
+
+/** Carta robada, en pantalla, a la espera de que su jugador la resuelva. */
+export interface DrawnCard {
+  cardId: string;
+  playerId: string;
 }
 
 export interface DiceRoll {
@@ -61,6 +90,14 @@ export interface PendingTrade {
   bCash: number;
   aProps: string[];
   bProps: string[];
+  /** Cartas guardadas que entrega cada lado (ids de carta). */
+  aCards?: string[];
+  bCards?: string[];
+  /** Fichas de Parada Libre que entrega cada lado. */
+  aSpins?: number;
+  bSpins?: number;
+  aBonus?: number;
+  bBonus?: number;
 }
 
 export interface GameState {
@@ -73,6 +110,16 @@ export interface GameState {
   settings: GameSettings;
   dice: DiceRoll | null;
   pendingTrade: PendingTrade | null;
+  /** Mazos barajados de la partida (se arman al empezar, según `settings.cardPacks`). */
+  decks: Record<DeckId, DeckState>;
+  /** Carta robada pendiente de resolver (visible para todos). */
+  drawnCard: DrawnCard | null;
+  /** Parada Libre: dinero acumulado en la casilla (impuestos, multas, ruleta). */
+  pot: number;
+  /** Parada Libre: quién lleva la limusina dorada (solo uno a la vez). */
+  limoPlayerId: string | null;
+  /** Parada Libre: última cara de la ruleta, en pantalla hasta que se cierre. */
+  wheel: { faceId: string; playerId: string } | null;
   /** false = pantalla de preparación; true = partida en curso. */
   started: boolean;
 }
@@ -84,7 +131,15 @@ export const DEFAULT_SETTINGS: GameSettings = {
   voice: true,
   initialBalance: GAME_CONFIG.initialBalance,
   evenBuild: true,
+  cardPacks: ['base'],
+  maxSpins: 3,
 };
+
+const emptyDecks = (): Record<DeckId, DeckState> => ({
+  arca: { draw: [], discard: [] },
+  fortuna: { draw: [], discard: [] },
+  bonificacion: { draw: [], discard: [] },
+});
 
 /** Rellena campos nuevos en estados antiguos (localStorage / remoto). */
 export function hydrate(s: GameState): GameState {
@@ -93,15 +148,28 @@ export function hydrate(s: GameState): GameState {
     settings: { ...DEFAULT_SETTINGS, ...(s.settings ?? {}) },
     dice: s.dice ?? null,
     pendingTrade: s.pendingTrade ?? null,
+    decks: { ...emptyDecks(), ...(s.decks ?? {}) },
+    drawnCard: s.drawnCard ?? null,
+    pot: s.pot ?? 0,
+    limoPlayerId: s.limoPlayerId ?? null,
+    wheel: s.wheel ?? null,
     // Estados guardados antes de existir la preparación ya estaban "en curso".
     started: s.started ?? true,
-    players: (s.players ?? []).map((p) => ({ ...p, admin: p.admin ?? false })),
+    players: (s.players ?? []).map((p) => ({
+      ...p,
+      admin: p.admin ?? false,
+      tokens: p.tokens ?? [],
+      spins: p.spins ?? 0,
+      bonus: p.bonus ?? 0,
+      jail: p.jail ?? 0,
+    })),
   };
 }
 
 export type Action =
   | { type: 'ADD_PLAYER'; name: string; icon?: string; colorIndex?: number; admin?: boolean }
   | { type: 'START_GAME' }
+  | { type: 'END_GAME' } // vuelve a la preparación conservando sala y jugadores
   | { type: 'REORDER_PLAYER'; playerId: string; dir: -1 | 1 }
   | { type: 'REMOVE_PLAYER'; playerId: string }
   | { type: 'DECLARE_BANKRUPTCY'; playerId: string }
@@ -115,13 +183,28 @@ export type Action =
   | { type: 'BUY_PROPERTY'; playerId: string; propertyId: string; price?: number }
   | { type: 'MORTGAGE'; playerId: string; propertyId: string }
   | { type: 'UNMORTGAGE'; playerId: string; propertyId: string }
-  | { type: 'BUILD_HOUSE'; playerId: string; propertyId: string }
+  | { type: 'BUILD_HOUSE'; playerId: string; propertyId: string; free?: boolean }
   | { type: 'SELL_HOUSE'; playerId: string; propertyId: string }
   | { type: 'EDIT_PLAYER'; playerId: string; name?: string; icon?: string; colorIndex?: number; admin?: boolean }
   | { type: 'PROPOSE_TRADE'; trade: Omit<PendingTrade, 'id'> }
   | { type: 'ACCEPT_TRADE' }
   | { type: 'REJECT_TRADE' }
   | { type: 'ROLL_DICE' }
+  | { type: 'DRAW_CARD'; deck: DeckId; playerId: string }
+  | { type: 'RESOLVE_CARD' } // aplica el efecto liquidable y descarta
+  | { type: 'CLAIM_GO_BONUS'; playerId: string } // "si pasa por Salida cobre 200"
+  | { type: 'USE_CARD'; playerId: string; cardId: string } // gasta una carta guardada
+  | { type: 'POT_ADD'; amount: number; playerId?: string } // al bote de Parada Libre
+  | { type: 'POT_TAKE'; playerId: string; share?: number } // cobrar el bote
+  | { type: 'SET_LIMO'; playerId: string | null } // asignar/quitar la limusina dorada
+  | { type: 'SPEND_TOKEN'; playerId: string; token: 'spins' | 'bonus'; delta?: number }
+  | { type: 'SPIN_WHEEL'; playerId: string } // gasta una ficha y gira la ruleta
+  | { type: 'CLOSE_WHEEL' }
+  | { type: 'RENT_TO_SPIN'; ownerId: string } // perdonas la renta y cobras una ficha de giro
+  | { type: 'LAND_FREE_PARKING'; playerId: string } // caes en la casilla: bote + limusina + tarjeta
+  | { type: 'GO_TO_JAIL'; playerId: string }
+  | { type: 'PAY_BAIL'; playerId: string } // paga la fianza y sale
+  | { type: 'LEAVE_JAIL'; playerId: string; reason?: string } // sale gratis (dobles, carta, indulto)
   | { type: 'SET_SETTINGS'; patch: Partial<GameSettings> }
   | { type: 'PAY_RENT'; fromId: string; toId: string; propertyId: string } // el jugador en turno paga renta al dueño
   | { type: 'NEXT_TURN' }
@@ -155,9 +238,38 @@ export function createGame(code: string, currencySymbol = '$'): GameState {
     settings: { ...DEFAULT_SETTINGS },
     dice: null,
     pendingTrade: null,
+    decks: emptyDecks(),
+    drawnCard: null,
+    pot: 0,
+    limoPlayerId: null,
+    wheel: null,
     started: false,
   };
 }
+
+/** Baraja una copia (Fisher-Yates). */
+function shuffle<T>(xs: T[]): T[] {
+  const a = [...xs];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** Arma los mazos barajados con las modalidades activas (expandiendo copias). */
+function buildDecks(packs: string[]): Record<DeckId, DeckState> {
+  const decks = emptyDecks();
+  for (const d of Object.keys(decks) as DeckId[]) {
+    decks[d] = { draw: shuffle(deckIds(d, packs)), discard: [] };
+  }
+  return decks;
+}
+
+/** Fichas iniciales que reparte cada modalidad al empezar. */
+const STARTING_TOKENS: Record<string, { spins: number; bonus: number }> = {
+  'parada-libre': { spins: 2, bonus: 2 },
+};
 
 /** Vista de tenencias de un jugador para los cálculos de patrimonio. */
 export function holdingsOf(p: RuntimePlayer): PlayerHoldings {
@@ -204,17 +316,45 @@ function executeTrade(players: RuntimePlayer[], t: PendingTrade): RuntimePlayer[
     const h = bHold.get(id);
     if (!h || h.houses > 0) return null;
   }
+  // Cartas guardadas y fichas: cada lado debe tener lo que ofrece.
+  const aCards = t.aCards ?? [];
+  const bCards = t.bCards ?? [];
+  const aSpins = t.aSpins ?? 0;
+  const bSpins = t.bSpins ?? 0;
+  const aBonus = t.aBonus ?? 0;
+  const bBonus = t.bBonus ?? 0;
+  if (aSpins < 0 || bSpins < 0 || aBonus < 0 || bBonus < 0) return null;
+  if (A.spins < aSpins || B.spins < bSpins || A.bonus < aBonus || B.bonus < bBonus) return null;
+  const takeCards = (owner: RuntimePlayer, wanted: string[]): string[] | null => {
+    const rest = [...owner.tokens];
+    for (const id of wanted) {
+      const i = rest.indexOf(id);
+      if (i < 0) return null; // no tiene esa carta (o no le quedan copias)
+      rest.splice(i, 1);
+    }
+    return rest;
+  };
+  const aRest = takeCards(A, aCards);
+  const bRest = takeCards(B, bCards);
+  if (!aRest || !bRest) return null;
+
   const aGives = A.holdings.filter((h) => aSet.has(h.propertyId)); // van a B (hipoteca incluida)
   const bGives = B.holdings.filter((h) => bSet.has(h.propertyId)); // van a A
   const newA: RuntimePlayer = {
     ...A,
     cash: A.cash - t.aCash + t.bCash,
     holdings: [...A.holdings.filter((h) => !aSet.has(h.propertyId)), ...bGives],
+    tokens: [...aRest, ...bCards],
+    spins: A.spins - aSpins + bSpins,
+    bonus: A.bonus - aBonus + bBonus,
   };
   const newB: RuntimePlayer = {
     ...B,
     cash: B.cash - t.bCash + t.aCash,
     holdings: [...B.holdings.filter((h) => !bSet.has(h.propertyId)), ...aGives],
+    tokens: [...bRest, ...aCards],
+    spins: B.spins - bSpins + aSpins,
+    bonus: B.bonus - bBonus + aBonus,
   };
   return players.map((p) => (p.id === A.id ? newA : p.id === B.id ? newB : p));
 }
@@ -224,13 +364,94 @@ function tradeDetail(s: GameState, t: PendingTrade): string {
   const A = s.players.find((x) => x.id === t.aId);
   const B = s.players.find((x) => x.id === t.bId);
   const nm = (ids: string[]) => ids.map((id) => getProperty(id)?.name ?? id).join(', ');
+  const cn = (ids: string[]) => ids.map((id) => getCard(id)?.emoji ?? '🃏').join('');
+  const fichas = (spins?: number, bonus?: number) =>
+    [spins ? `${spins}🎡` : '', bonus ? `${bonus}⭐` : ''].filter(Boolean).join(' ');
   const parts = [
     t.aProps.length ? `${A?.name} dio ${nm(t.aProps)}` : '',
     t.aCash ? `${A?.name} dio ${t.aCash}` : '',
+    t.aCards?.length ? `${A?.name} dio ${cn(t.aCards)}` : '',
+    fichas(t.aSpins, t.aBonus) ? `${A?.name} dio ${fichas(t.aSpins, t.aBonus)}` : '',
     t.bProps.length ? `${B?.name} dio ${nm(t.bProps)}` : '',
     t.bCash ? `${B?.name} dio ${t.bCash}` : '',
+    t.bCards?.length ? `${B?.name} dio ${cn(t.bCards)}` : '',
+    fichas(t.bSpins, t.bBonus) ? `${B?.name} dio ${fichas(t.bSpins, t.bBonus)}` : '',
   ].filter(Boolean);
   return parts.join(' · ');
+}
+
+const DECK_LABEL: Record<DeckId, string> = {
+  arca: '📦 Arca Comunal',
+  fortuna: '❓ Fortuna',
+  bonificacion: '⭐ Bonificación',
+};
+
+/**
+ * Traduce el efecto de una carta a la acción de dinero equivalente, para
+ * reutilizar las guardas y el log que ya existen. `null` = sin dinero
+ * automático (carta instructiva: el jugador mueve su ficha).
+ */
+function actionFor(s: GameState, e: CardEffect, p: RuntimePlayer): Action | null {
+  const others = s.players.filter((x) => x.id !== p.id && !x.bankrupt).map((x) => x.id);
+  switch (e.kind) {
+    case 'bank_pay':
+      return { type: 'BANK_TO_PLAYER', playerId: p.id, amount: e.amount };
+    case 'bank_charge':
+      return { type: 'PLAYER_TO_BANK', playerId: p.id, amount: e.amount };
+    case 'collect_each':
+      return others.length ? { type: 'COLLECT', toId: p.id, fromIds: others, amount: e.amount } : null;
+    case 'pay_each':
+      return others.length ? { type: 'TRANSFER', fromId: p.id, toIds: others, amount: e.amount } : null;
+    case 'repairs': {
+      const b = buildingCounts(holdingsOf(p));
+      const total = b.houses * e.perHouse + b.hotels * e.perHotel;
+      return total > 0 ? { type: 'PLAYER_TO_BANK', playerId: p.id, amount: total } : null;
+    }
+    case 'pay_percent': {
+      const base = e.of === 'cash' ? p.cash : netWorth(holdingsOf(p));
+      const total = Math.round(base * e.rate);
+      return total > 0 ? { type: 'PLAYER_TO_BANK', playerId: p.id, amount: total } : null;
+    }
+    case 'pay_per_property': {
+      const total = p.holdings.length * e.amount;
+      return total > 0 ? { type: 'PLAYER_TO_BANK', playerId: p.id, amount: total } : null;
+    }
+    case 'collect_per_property': {
+      const total = p.holdings.length * e.amount;
+      return total > 0 ? { type: 'BANK_TO_PLAYER', playerId: p.id, amount: total } : null;
+    }
+    case 'collect_richest': {
+      const rich = richestOther(s, p);
+      return rich ? { type: 'COLLECT', toId: p.id, fromIds: [rich.id], amount: e.amount } : null;
+    }
+    case 'pay_richest': {
+      const rich = richestOther(s, p);
+      return rich ? { type: 'TRANSFER', fromId: p.id, toIds: [rich.id], amount: e.amount } : null;
+    }
+    case 'pot_add':
+      return { type: 'POT_ADD', playerId: p.id, amount: e.amount };
+    case 'pot_take':
+      return s.pot > 0 ? { type: 'POT_TAKE', playerId: p.id, share: e.share } : null;
+    case 'limo':
+      return { type: 'SET_LIMO', playerId: p.id };
+    case 'jail_free':
+      // Solo hace algo si está preso; si no, la carta se guarda para más tarde.
+      return p.jail > 0 ? { type: 'LEAVE_JAIL', playerId: p.id, reason: 'usó su indulto' } : null;
+    case 'to_jail':
+      // El motor marca el encierro; mover la ficha sigue siendo cosa del jugador.
+      return { type: 'GO_TO_JAIL', playerId: p.id };
+    case 'goto':
+      return e.bonus ? { type: 'BANK_TO_PLAYER', playerId: p.id, amount: e.bonus } : null;
+    default:
+      return null;
+  }
+}
+
+/** El rival con mayor patrimonio (para las cartas que apuntan "al más rico"). */
+function richestOther(s: GameState, p: RuntimePlayer): RuntimePlayer | null {
+  const others = s.players.filter((x) => x.id !== p.id && !x.bankrupt);
+  if (others.length === 0) return null;
+  return others.reduce((best, x) => (netWorth(holdingsOf(x)) > netWorth(holdingsOf(best)) ? x : best));
 }
 
 export function reducer(s: GameState, a: Action): GameState {
@@ -245,6 +466,10 @@ export function reducer(s: GameState, a: Action): GameState {
         cash: s.settings.initialBalance,
         bankrupt: false,
         holdings: [],
+        tokens: [],
+        spins: 0,
+        bonus: 0,
+        jail: 0,
         admin: a.admin ?? false,
       };
       return { ...s, players: [...s.players, p], log: log(s, `Se unió ${p.name}`) };
@@ -256,8 +481,53 @@ export function reducer(s: GameState, a: Action): GameState {
     case 'START_GAME': {
       if (s.players.length === 0) return s;
       // Aplica el dinero inicial configurado y comienza en el primer jugador.
-      const players = s.players.map((p) => ({ ...p, cash: s.settings.initialBalance }));
-      return { ...s, players, started: true, turnIndex: 0, log: log(s, '¡Empieza la partida!') };
+      const start = s.settings.cardPacks.reduce(
+        (acc, pack) => {
+          const t = STARTING_TOKENS[pack];
+          return t ? { spins: acc.spins + t.spins, bonus: acc.bonus + t.bonus } : acc;
+        },
+        { spins: 0, bonus: 0 },
+      );
+      // Empezar es empezar de cero: dinero inicial y nada heredado de una
+      // partida anterior (importante tras END_GAME, que conserva a los jugadores).
+      const players = s.players.map((p) => ({
+        ...p,
+        cash: s.settings.initialBalance,
+        holdings: [],
+        bankrupt: false,
+        tokens: [],
+        spins: start.spins,
+        bonus: start.bonus,
+        jail: 0,
+      }));
+      return {
+        ...s,
+        players,
+        started: true,
+        turnIndex: 0,
+        decks: buildDecks(s.settings.cardPacks),
+        drawnCard: null,
+        pot: 0,
+        limoPlayerId: null,
+        wheel: null,
+        log: log(s, '¡Empieza la partida!'),
+      };
+    }
+
+    case 'END_GAME': {
+      if (!s.started) return s;
+      // Vuelve al panel de preparación con los mismos jugadores y el mismo código
+      // de sala, para poder reconfigurar y volver a empezar. START_GAME repone
+      // dinero, mazos y fichas.
+      return {
+        ...s,
+        started: false,
+        dice: null,
+        drawnCard: null,
+        wheel: null,
+        pendingTrade: null,
+        log: log(s, '🏁 Partida terminada: de vuelta a la preparación'),
+      };
     }
 
     case 'REORDER_PLAYER': {
@@ -282,10 +552,14 @@ export function reducer(s: GameState, a: Action): GameState {
     case 'PLAYER_TO_BANK': {
       const p = s.players.find((x) => x.id === a.playerId);
       if (!p || a.amount <= 0 || p.cash - a.amount < MIN_CASH) return s;
+      // Parada Libre: "TODO el dinero que pagarías al banco va al Gran Premio".
+      // Solo multas/impuestos/cartas; las compras y construcciones no pasan por aquí.
+      const toPot = s.settings.cardPacks.includes('parada-libre');
       return {
         ...s,
         players: mapPlayer(s, a.playerId, (x) => ({ ...x, cash: x.cash - a.amount })),
-        log: log(s, `${p.name} pagó ${a.amount} al banco`),
+        pot: toPot ? s.pot + a.amount : s.pot,
+        log: log(s, `${p.name} pagó ${a.amount} ${toPot ? `a la Parada Libre (bote: ${s.pot + a.amount})` : 'al banco'}`),
       };
     }
 
@@ -390,9 +664,15 @@ export function reducer(s: GameState, a: Action): GameState {
       const prop = getProperty(a.propertyId);
       const p = s.players.find((x) => x.id === a.playerId);
       if (!prop || !p) return s;
-      if (!canBuildOn(holdingsOf(p), a.propertyId, s.settings.evenBuild)) return s;
-      if (p.cash - prop.houseCost < MIN_CASH) return s;
-      const h = p.holdings.find((x) => x.propertyId === a.propertyId)!;
+      const h0 = p.holdings.find((x) => x.propertyId === a.propertyId);
+      // "Casa gratis" (Parada Libre): se salta grupo completo, construcción pareja y coste.
+      if (a.free) {
+        if (!h0 || !prop.isBuildable || h0.mortgaged || h0.houses >= 5) return s;
+      } else {
+        if (!canBuildOn(holdingsOf(p), a.propertyId, s.settings.evenBuild)) return s;
+        if (p.cash - prop.houseCost < MIN_CASH) return s;
+      }
+      const h = h0!;
       const left = bankBuildingsLeft(s);
       const willBeHotel = h.houses + 1 >= 5;
       if (willBeHotel ? left.hotels <= 0 : left.houses <= 0) return s;
@@ -400,12 +680,12 @@ export function reducer(s: GameState, a: Action): GameState {
         ...s,
         players: mapPlayer(s, a.playerId, (x) => ({
           ...x,
-          cash: x.cash - prop.houseCost,
+          cash: x.cash - (a.free ? 0 : prop.houseCost),
           holdings: x.holdings.map((y) =>
             y.propertyId === a.propertyId ? { ...y, houses: y.houses + 1 } : y,
           ),
         })),
-        log: log(s, `${p.name} construyó en ${prop.name} (${willBeHotel ? 'hotel' : h.houses + 1 + ' casas'})`),
+        log: log(s, `${p.name} construyó${a.free ? ' gratis' : ''} en ${prop.name} (${willBeHotel ? 'hotel' : h.houses + 1 + ' casas'})`),
       };
     }
 
@@ -451,9 +731,17 @@ export function reducer(s: GameState, a: Action): GameState {
     case 'DECLARE_BANKRUPTCY': {
       const p = s.players.find((x) => x.id === a.playerId);
       if (!p || p.bankrupt) return s;
+      // Las cartas retenidas vuelven al descarte de su mazo.
+      const decks = { ...s.decks };
+      for (const cardId of p.tokens) {
+        const d = getCard(cardId)?.deck ?? 'arca';
+        decks[d] = { ...decks[d], discard: [cardId, ...decks[d].discard] };
+      }
       return {
         ...s,
-        players: mapPlayer(s, a.playerId, (x) => ({ ...x, bankrupt: true, cash: 0, holdings: [] })),
+        players: mapPlayer(s, a.playerId, (x) => ({ ...x, bankrupt: true, cash: 0, holdings: [], tokens: [], spins: 0, bonus: 0 })),
+        decks,
+        limoPlayerId: s.limoPlayerId === p.id ? null : s.limoPlayerId,
         log: log(s, `${p.name} se declaró en bancarrota (sus propiedades vuelven al banco)`),
       };
     }
@@ -481,7 +769,12 @@ export function reducer(s: GameState, a: Action): GameState {
       const A = s.players.find((x) => x.id === t.aId);
       const B = s.players.find((x) => x.id === t.bId);
       if (!A || !B || A.id === B.id) return s;
-      const empty = t.aCash === 0 && t.bCash === 0 && t.aProps.length === 0 && t.bProps.length === 0;
+      // Una propuesta de solo cartas o solo fichas también es válida.
+      const empty =
+        t.aCash === 0 && t.bCash === 0 &&
+        t.aProps.length === 0 && t.bProps.length === 0 &&
+        !t.aCards?.length && !t.bCards?.length &&
+        !t.aSpins && !t.bSpins && !t.aBonus && !t.bBonus;
       if (empty) return s;
       return {
         ...s,
@@ -547,6 +840,219 @@ export function reducer(s: GameState, a: Action): GameState {
       return { ...s, dice: { a, b, special }, log: log(s, txt) };
     }
 
+    case 'DRAW_CARD': {
+      const p = s.players.find((x) => x.id === a.playerId);
+      if (!p || s.drawnCard) return s; // hay una carta sin resolver
+      let d = s.decks[a.deck];
+      // Mazo agotado: se rebaraja el descarte (las retenidas no vuelven).
+      if (d.draw.length === 0) {
+        if (d.discard.length === 0) return s;
+        d = { draw: shuffle(d.discard), discard: [] };
+      }
+      const [cardId, ...rest] = d.draw;
+      const card = getCard(cardId);
+      return {
+        ...s,
+        decks: { ...s.decks, [a.deck]: { ...d, draw: rest } },
+        drawnCard: { cardId, playerId: a.playerId },
+        log: log(s, `${p.name} sacó ${DECK_LABEL[a.deck]}: ${card ? cardText(card, s.currencySymbol) : cardId}`),
+      };
+    }
+
+    case 'RESOLVE_CARD': {
+      const drawn = s.drawnCard;
+      if (!drawn) return s;
+      const card = getCard(drawn.cardId);
+      const p = s.players.find((x) => x.id === drawn.playerId);
+      if (!card || !p) return { ...s, drawnCard: null };
+
+      // Cartas que se conservan: no van al descarte, pasan a la mano del jugador.
+      if (card.keep) {
+        return {
+          ...s,
+          players: mapPlayer(s, p.id, (x) => ({ ...x, tokens: [...x.tokens, card.id] })),
+          drawnCard: null,
+          log: log(s, `${p.name} guarda ${card.emoji} ${cardText(card, s.currencySymbol)}`),
+        };
+      }
+
+      const money = actionFor(s, card.effect, p);
+      const applied = money ? reducer(s, money) : s;
+      // El pago no cabía (dejaría al jugador sin efectivo mínimo): la carta sigue
+      // pendiente para que hipoteque o venda y vuelva a intentarlo.
+      if (money && applied === s) {
+        return { ...s, log: log(s, `⚠️ ${p.name} no puede pagar la carta: liquida algo e inténtalo de nuevo`) };
+      }
+      const discard = [card.id, ...applied.decks[card.deck].discard];
+      return {
+        ...applied,
+        decks: { ...applied.decks, [card.deck]: { ...applied.decks[card.deck], discard } },
+        drawnCard: null,
+      };
+    }
+
+    case 'CLAIM_GO_BONUS': {
+      const p = s.players.find((x) => x.id === a.playerId);
+      if (!p) return s;
+      return {
+        ...s,
+        players: mapPlayer(s, a.playerId, (x) => ({ ...x, cash: x.cash + GAME_CONFIG.goSalary })),
+        log: log(s, `${p.name} pasó por SALIDA con la carta (+${GAME_CONFIG.goSalary})`),
+      };
+    }
+
+    case 'USE_CARD': {
+      const p = s.players.find((x) => x.id === a.playerId);
+      if (!p || !p.tokens.includes(a.cardId)) return s;
+      const card = getCard(a.cardId);
+      if (!card) return s;
+      // Gasta solo una copia, aunque tenga varias iguales.
+      const i = p.tokens.indexOf(a.cardId);
+      const tokens = [...p.tokens.slice(0, i), ...p.tokens.slice(i + 1)];
+      // Si al usarse mueve dinero, se aplica igual que al resolverla.
+      const money = actionFor(s, card.effect, p);
+      const base: GameState = {
+        ...s,
+        players: mapPlayer(s, p.id, (x) => ({ ...x, tokens })),
+        decks: {
+          ...s.decks,
+          [card.deck]: { ...s.decks[card.deck], discard: [card.id, ...s.decks[card.deck].discard] },
+        },
+        log: log(s, `${p.name} usó ${card.emoji} ${cardText(card, s.currencySymbol)}`),
+      };
+      return money ? reducer(base, money) : base;
+    }
+
+    case 'POT_ADD': {
+      if (a.amount <= 0) return s;
+      // Si viene de un jugador, se le descuenta (respetando el mínimo de caja).
+      if (a.playerId) {
+        const p = s.players.find((x) => x.id === a.playerId);
+        if (!p || p.cash - a.amount < MIN_CASH) return s;
+        return {
+          ...s,
+          players: mapPlayer(s, a.playerId, (x) => ({ ...x, cash: x.cash - a.amount })),
+          pot: s.pot + a.amount,
+          log: log(s, `${p.name} dejó ${a.amount} en la Parada Libre (bote: ${s.pot + a.amount})`),
+        };
+      }
+      return { ...s, pot: s.pot + a.amount, log: log(s, `Al bote de la Parada Libre: +${a.amount} (bote: ${s.pot + a.amount})`) };
+    }
+
+    case 'POT_TAKE': {
+      const p = s.players.find((x) => x.id === a.playerId);
+      if (!p || s.pot <= 0) return s;
+      const share = a.share ?? 1;
+      const amount = Math.round(s.pot * share);
+      if (amount <= 0) return s;
+      return {
+        ...s,
+        players: mapPlayer(s, a.playerId, (x) => ({ ...x, cash: x.cash + amount })),
+        pot: s.pot - amount,
+        log: log(s, `🎰 ${p.name} se llevó ${amount} de la Parada Libre`),
+      };
+    }
+
+    case 'SET_LIMO': {
+      if (a.playerId === null) {
+        if (!s.limoPlayerId) return s;
+        const prev = s.players.find((x) => x.id === s.limoPlayerId);
+        return { ...s, limoPlayerId: null, log: log(s, `🚘 ${prev?.name ?? 'Alguien'} pierde la limusina dorada`) };
+      }
+      const p = s.players.find((x) => x.id === a.playerId);
+      if (!p || s.limoPlayerId === p.id) return s;
+      return { ...s, limoPlayerId: p.id, log: log(s, `🚘 ${p.name} se lleva la limusina dorada`) };
+    }
+
+    case 'SPIN_WHEEL': {
+      const p = s.players.find((x) => x.id === a.playerId);
+      if (!p || p.spins <= 0 || s.wheel) return s;
+      const face = WHEEL[Math.floor(Math.random() * WHEEL.length)];
+      // Gasta la ficha de giro y gana una de bonificación ("una tarjeta por giro").
+      const spun: GameState = {
+        ...s,
+        players: mapPlayer(s, p.id, (x) => ({ ...x, spins: x.spins - 1, bonus: x.bonus + 1 })),
+        wheel: { faceId: face.id, playerId: p.id },
+        log: log(s, `🎡 ${p.name} giró la ruleta: ${wheelText(face, s.currencySymbol)}`),
+      };
+      const effect = actionFor(spun, face.effect, spun.players.find((x) => x.id === p.id)!);
+      return effect ? reducer(spun, effect) : spun;
+    }
+
+    case 'CLOSE_WHEEL':
+      return s.wheel ? { ...s, wheel: null } : s;
+
+    case 'RENT_TO_SPIN': {
+      const owner = s.players.find((x) => x.id === a.ownerId);
+      if (!owner) return s;
+      const max = s.settings.maxSpins;
+      // Tope anti-abuso: sin él, dos jugadores pactan perdonarse la renta para
+      // fabricar fichas gratis (el banco es una fuente infinita).
+      if (max > 0 && owner.spins >= max) return s;
+      return {
+        ...s,
+        players: mapPlayer(s, owner.id, (x) => ({ ...x, spins: x.spins + 1 })),
+        log: log(s, `${owner.name} perdonó la renta y tomó una ficha de giro 🎡`),
+      };
+    }
+
+    case 'GO_TO_JAIL': {
+      const p = s.players.find((x) => x.id === a.playerId);
+      if (!p || p.jail > 0) return s;
+      return {
+        ...s,
+        players: mapPlayer(s, p.id, (x) => ({ ...x, jail: 1 })),
+        // Quien va preso pierde la limusina dorada.
+        limoPlayerId: s.limoPlayerId === p.id ? null : s.limoPlayerId,
+        log: log(s, `🚔 ${p.name} va a la cárcel`),
+      };
+    }
+
+    case 'PAY_BAIL': {
+      const p = s.players.find((x) => x.id === a.playerId);
+      if (!p || p.jail === 0) return s;
+      const paid = reducer(s, { type: 'PLAYER_TO_BANK', playerId: p.id, amount: GAME_CONFIG.bail });
+      if (paid === s) return s; // no le alcanza
+      return {
+        ...paid,
+        players: mapPlayer(paid, p.id, (x) => ({ ...x, jail: 0 })),
+        log: log(paid, `${p.name} pagó la fianza y sale de la cárcel`),
+      };
+    }
+
+    case 'LEAVE_JAIL': {
+      const p = s.players.find((x) => x.id === a.playerId);
+      if (!p || p.jail === 0) return s;
+      return {
+        ...s,
+        players: mapPlayer(s, p.id, (x) => ({ ...x, jail: 0 })),
+        log: log(s, `${p.name} sale de la cárcel${a.reason ? ` (${a.reason})` : ''}`),
+      };
+    }
+
+    case 'LAND_FREE_PARKING': {
+      const p = s.players.find((x) => x.id === a.playerId);
+      if (!p) return s;
+      // La casilla entrega: el Gran Premio, la limusina y una tarjeta de Bonificación.
+      const amount = s.pot;
+      return {
+        ...s,
+        players: mapPlayer(s, p.id, (x) => ({ ...x, cash: x.cash + amount, bonus: x.bonus + 1 })),
+        pot: 0,
+        limoPlayerId: p.id,
+        log: log(s, `🅿️ ${p.name} cayó en la Parada Libre: +${amount}, la limusina 🚘 y una tarjeta ⭐`),
+      };
+    }
+
+    case 'SPEND_TOKEN': {
+      const p = s.players.find((x) => x.id === a.playerId);
+      const delta = a.delta ?? -1;
+      if (!p) return s;
+      const next = p[a.token] + delta;
+      if (next < 0) return s;
+      return { ...s, players: mapPlayer(s, p.id, (x) => ({ ...x, [a.token]: next })) };
+    }
+
     case 'SET_SETTINGS':
       return { ...s, settings: { ...s.settings, ...a.patch } };
 
@@ -561,6 +1067,25 @@ export function reducer(s: GameState, a: Action): GameState {
         if (!s.players[idx].bankrupt) break;
       }
       const next = s.players[idx];
+      // Al empezar su turno, quien está preso cumple uno más; a los 3 sale
+      // pagando la fianza (regla clásica), o gratis si no le alcanza.
+      if (next.jail > 0) {
+        const served = next.jail + 1;
+        if (served > GAME_CONFIG.jailTurns) {
+          const paid = reducer({ ...s, turnIndex: idx, dice: null }, { type: 'PAY_BAIL', playerId: next.id });
+          const out = paid.players.find((x) => x.id === next.id)!.jail === 0
+            ? paid
+            : reducer({ ...s, turnIndex: idx, dice: null }, { type: 'LEAVE_JAIL', playerId: next.id, reason: 'cumplió su condena' });
+          return { ...out, log: log(out, `Es el turno de ${next.name}`) };
+        }
+        return {
+          ...s,
+          turnIndex: idx,
+          dice: null,
+          players: mapPlayer(s, next.id, (x) => ({ ...x, jail: served })),
+          log: log(s, `Es el turno de ${next.name} 🚔 (turno ${served} de ${GAME_CONFIG.jailTurns} en la cárcel)`),
+        };
+      }
       return { ...s, turnIndex: idx, dice: null, log: log(s, `Es el turno de ${next.name}`) };
     }
 

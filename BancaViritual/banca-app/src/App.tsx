@@ -3,6 +3,7 @@ import './App.css';
 import { PropertyCard } from './components/PropertyCard';
 import { WealthChart } from './components/WealthChart';
 import { BOARD, getProperty, GROUPS } from './domain/board';
+import { activeDecks, CARDS, cardText, DECKS, getCard, getWheelFace, isAutomatic, PACKS, packSize, WHEEL, wheelText, type DeckId } from './domain/cards';
 import {
   bankBuildingsLeft,
   createGame,
@@ -19,6 +20,7 @@ import {
   type RuntimePlayer,
 } from './game/engine';
 import { canBuildOn, canSellOn } from './domain/wealth';
+import { GAME_CONFIG } from './domain/config';
 import type { Property } from './domain/Property';
 import { blip, speak } from './game/feedback';
 import { useGame } from './game/useGame';
@@ -107,6 +109,16 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Mantener ?room= sincronizado con la sala actual. Sin esto, tras crear una
+  // sala nueva el enlace viejo seguía en la barra y al recargar volvías a la
+  // sala anterior (o la resucitabas después de eliminarla).
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('room') === state.code) return;
+    url.searchParams.set('room', state.code);
+    window.history.replaceState(null, '', url.toString());
+  }, [state.code]);
+
   const shareLink = `${window.location.origin}${window.location.pathname}?room=${state.code}`;
   const share = async () => {
     try {
@@ -134,9 +146,16 @@ export default function App() {
     if (state.settings.voice) speak(top.text);
   }, [state.log, state.settings.sound, state.settings.voice]);
 
+  // Salida propia: este dispositivo se va a una sala nueva (no afecta a los demás).
+  const newRoom = () => {
+    if (!confirm('¿Salir a una sala nueva?\n\nSe crea otra sala con un código nuevo solo para este dispositivo.')) return;
+    setMe(null);
+    reset(true);
+  };
+
   // ── Fase de preparación ──
   if (!state.started) {
-    return <SetupScreen state={state} act={act} share={share} onJoin={join} />;
+    return <SetupScreen state={state} act={act} share={share} onJoin={join} onNewRoom={newRoom} />;
   }
 
   // Elegir jugador: reclama la identidad en el estado compartido (evita robos entre dispositivos).
@@ -152,6 +171,13 @@ export default function App() {
   // Reinicia la partida de ESTA sala para todos (mismo código, se propaga por sync).
   const newGame = () => {
     if (confirm('¿Reiniciar la partida de esta sala? Se borra para todos los dispositivos.')) reset(false);
+  };
+  // Termina la partida y devuelve a TODOS al panel de preparación, conservando
+  // sala y jugadores (para reconfigurar y volver a empezar).
+  const endGame = () => {
+    if (confirm('¿Terminar la partida?\n\nTodos vuelven al panel de preparación. Se conservan los jugadores y el código de sala.')) {
+      act({ type: 'END_GAME' });
+    }
   };
   // Elimina la sala compartida: borra la fila en Supabase y todos salen a una sala nueva.
   const deleteRoom = async () => {
@@ -169,7 +195,7 @@ export default function App() {
   const isViewer = meId === VIEWER;
   const me = isViewer ? null : state.players.find((p) => p.id === meId) ?? null;
   if (state.players.length > 0 && !me && !isViewer) {
-    return <IdentityPicker players={state.players} onPick={pickIdentity} deviceId={deviceId} />;
+    return <IdentityPicker players={state.players} onPick={pickIdentity} deviceId={deviceId} code={state.code} onNewRoom={newRoom} />;
   }
 
   const amAdmin = !!me?.admin;
@@ -197,7 +223,9 @@ export default function App() {
           <button onClick={() => setSheet({ kind: 'chart' })} title="Gráfico de patrimonio">📈</button>
           <button onClick={() => setSheet({ kind: 'settings' })} title="Ajustes">⚙️</button>
           <button onClick={share} title="Copiar enlace de invitación">Compartir</button>
-          {amAdmin && <button onClick={newGame} title="Reiniciar la partida de esta sala (mismo código)">Nueva</button>}
+          {amAdmin && <button onClick={endGame} title="Terminar la partida: todos vuelven al panel de preparación">🏁 Terminar</button>}
+          {amAdmin && <button onClick={newGame} title="Reiniciar la partida de esta sala (mismo código, borra jugadores)">Nueva</button>}
+          <button onClick={newRoom} title="Salir a una sala nueva (solo este dispositivo)">➕ Sala nueva</button>
           {amAdmin && <button onClick={deleteRoom} title="Eliminar la sala para todos">🗑️</button>}
         </div>
       </header>
@@ -206,12 +234,54 @@ export default function App() {
         <div className="turnbar">
           <span className="turnbar__who">Turno: <b>{turnPlayer.icon} {turnPlayer.name}</b>{myTurn && ' (tú)'}</span>
           {state.settings.dice && <DiceView dice={state.dice} onRoll={() => act({ type: 'ROLL_DICE' })} canRoll={myTurn} />}
+          <span className="turnbar__decks">
+            {activeDecks(state.settings.cardPacks).map((d) => {
+              // El mazo de Bonificación se paga con una ficha del jugador en turno.
+              const needsToken = d === 'bonificacion';
+              const hasToken = !needsToken || turnPlayer.bonus > 0;
+              return (
+                <button
+                  key={d}
+                  className="deckbtn"
+                  style={{ ['--deck-color' as string]: DECKS[d].color }}
+                  disabled={!myTurn || !!state.drawnCard || deckLeft(state, d) === 0 || !hasToken}
+                  title={needsToken
+                    ? `${DECKS[d].label} — cuesta 1 ficha (tienes ${turnPlayer.bonus})`
+                    : `${DECKS[d].label} — ${deckLeft(state, d)} cartas`}
+                  onClick={() => {
+                    if (needsToken) act({ type: 'SPEND_TOKEN', playerId: turnPlayer.id, token: 'bonus' });
+                    act({ type: 'DRAW_CARD', deck: d, playerId: turnPlayer.id });
+                  }}
+                >
+                  {DECKS[d].emoji} <small>{needsToken ? turnPlayer.bonus : deckLeft(state, d)}</small>
+                </button>
+              );
+            })}
+          </span>
           <span className="turnbar__btns">
             <button onClick={() => act({ type: 'NEXT_TURN' })} disabled={!myTurn} title={myTurn ? '' : 'Solo el jugador en turno puede pasar'}>
               {myTurn ? 'Siguiente turno →' : '🔒 Siguiente turno'}
             </button>
           </span>
         </div>
+      )}
+
+      {state.settings.cardPacks.includes('parada-libre') && (
+        <ParadaLibreBar state={state} act={act} money={money} me={me} canControl={canControl} />
+      )}
+
+      {state.wheel && (
+        <WheelModal state={state} act={act} canAct={canControl(state.wheel.playerId)} />
+      )}
+
+      {state.drawnCard && (
+        <CardModal
+          drawn={state.drawnCard}
+          state={state}
+          act={act}
+          money={money}
+          canAct={canControl(state.drawnCard.playerId)}
+        />
       )}
 
       {state.pendingTrade && (
@@ -236,6 +306,14 @@ export default function App() {
             isSelf={me?.id === p.id}
             onOpen={(k) => setSheet({ kind: k, playerId: p.id })}
             onSalida={() => act({ type: 'SALIDA', playerId: p.id })}
+            onUseCard={(cardId) => act({ type: 'USE_CARD', playerId: p.id, cardId })}
+            onJail={() => act({ type: 'GO_TO_JAIL', playerId: p.id })}
+            onPayBail={() => act({ type: 'PAY_BAIL', playerId: p.id })}
+            onLeaveJail={() => act({ type: 'LEAVE_JAIL', playerId: p.id })}
+            sym={state.currencySymbol}
+            hasLimo={state.limoPlayerId === p.id}
+            bailText={money(GAME_CONFIG.bail)}
+            jailTurns={GAME_CONFIG.jailTurns}
             onBankrupt={() => { if (confirm(`¿Declararte en bancarrota, ${p.name}? Tus propiedades vuelven al banco.`)) act({ type: 'DECLARE_BANKRUPTCY', playerId: p.id }); }}
           />
         ))}
@@ -263,7 +341,8 @@ export default function App() {
 }
 
 function PlayerTile({
-  p, money, isCurrent, canControl, canTrade, isSelf, onOpen, onSalida, onBankrupt,
+  p, money, isCurrent, canControl, canTrade, isSelf, onOpen, onSalida, onUseCard, onBankrupt,
+  onJail, onPayBail, onLeaveJail, sym, hasLimo, bailText, jailTurns,
 }: {
   p: RuntimePlayer;
   money: (n: number) => string;
@@ -273,7 +352,15 @@ function PlayerTile({
   isSelf: boolean;
   onOpen: (k: Sheet['kind']) => void;
   onSalida: () => void;
+  onUseCard: (cardId: string) => void;
   onBankrupt: () => void;
+  onJail: () => void;
+  onPayBail: () => void;
+  onLeaveJail: () => void;
+  sym: string;
+  hasLimo: boolean;
+  bailText: string;
+  jailTurns: number;
 }) {
   const nw = playerNetWorth(p);
   const b = playerBuildings(p);
@@ -281,7 +368,7 @@ function PlayerTile({
   return (
     <article className={`ptile ${isCurrent ? 'ptile--current' : ''} ${canControl ? '' : 'ptile--other'} ${p.bankrupt ? 'ptile--bankrupt' : ''}`} style={{ borderTopColor: color }}>
       <div className="ptile__head">
-        <span className="ptile__name">{p.icon} {p.name} {isCurrent && '⭐'} {p.admin && '🛡️'} {p.bankrupt && '💀'}</span>
+        <span className="ptile__name">{p.icon} {p.name} {isCurrent && '⭐'} {p.admin && '🛡️'} {hasLimo && '🚘'} {p.jail > 0 && '🚔'} {p.bankrupt && '💀'}</span>
         {canControl && <button className="ptile__edit" title="Editar personaje" onClick={() => onOpen('edit')}>✏️</button>}
       </div>
       <div className="ptile__cash">{money(p.cash)}</div>
@@ -289,7 +376,40 @@ function PlayerTile({
         <span title="Patrimonio total (efectivo + propiedades + casas)">💎 {money(nw)}</span>
         <span title="Propiedades">🏷️ {p.holdings.length}</span>
         <span title="Casas / Hoteles">🏠 {b.houses} · 🏨 {b.hotels}</span>
+        {p.spins > 0 && <span title="Fichas para girar la ruleta">🎡 {p.spins}</span>}
+        {p.bonus > 0 && <span title="Fichas para robar del mazo de Bonificación">⭐ {p.bonus}</span>}
       </div>
+      {p.jail > 0 && (
+        <div className="ptile__jail">
+          <span>🚔 En la cárcel · turno {p.jail}/{jailTurns}</span>
+          {canControl && (
+            <span className="ptile__jailbtns">
+              <button onClick={onPayBail} title={`Pagar la fianza (${bailText})`}>Fianza {bailText}</button>
+              <button onClick={onLeaveJail} title="Sacaste dobles o te liberan">Salir</button>
+            </span>
+          )}
+        </div>
+      )}
+      {p.tokens.length > 0 && (
+        <div className="ptile__hand">
+          {p.tokens.map((cardId, i) => {
+            const c = getCard(cardId);
+            if (!c) return null;
+            return canControl ? (
+              <button
+                key={`${cardId}-${i}`}
+                className="ptile__card"
+                title={`Usar: ${cardText(c, sym)}`}
+                onClick={() => { if (confirm(`Usar esta carta?\n\n${cardText(c, sym)}`)) onUseCard(cardId); }}
+              >
+                {c.emoji} usar
+              </button>
+            ) : (
+              <span key={`${cardId}-${i}`} className="ptile__card ptile__card--ro" title={cardText(c, sym)}>{c.emoji}</span>
+            );
+          })}
+        </div>
+      )}
       <div className="ptile__btns">
         {canControl ? (
           <>
@@ -297,6 +417,7 @@ function PlayerTile({
             <button className="b-out" onClick={() => onOpen('pay')}>Pagar</button>
             <button className="b-prop" onClick={() => onOpen('props')}>Propiedades</button>
             <button className="b-salida" onClick={onSalida}>🟢 Salida</button>
+            {p.jail === 0 && <button className="b-jail" onClick={onJail} title="Ve a la cárcel">🚔</button>}
             {isCurrent && canTrade && <button className="b-trade" onClick={() => onOpen('trade')}>Negociar</button>}
           </>
         ) : (
@@ -393,7 +514,7 @@ function SheetContent({
 
   if (sheet.kind === 'trade') {
     const others = state.players.filter((p) => p.id !== me.id && !p.bankrupt);
-    return <TradePanel me={me} others={others} act={act} money={money} close={close} />;
+    return <TradePanel me={me} others={others} act={act} money={money} close={close} sym={state.currencySymbol} />;
   }
   return null;
 }
@@ -637,11 +758,14 @@ function Market({
   );
   const available = BOARD.filter((p) => !ownedIds.has(p.id));
   const left = bankBuildingsLeft(state);
+  // La toma gratuita solo tiene sentido con Parada Libre en juego.
+  const freebie = state.settings.cardPacks.includes('parada-libre');
 
   return (
     <div className="form">
       <h2>🛒 Comprar propiedad — {me.name}</h2>
       <p className="hint">Efectivo: {money(me.cash)} · Casas banco: {left.houses} · Hoteles: {left.hotels}</p>
+      {freebie && <p className="hint">🎁 <b>Gratis</b> aparece por la modalidad Parada Libre: úsalo solo si tienes la carta o el sector de la ruleta.</p>}
       <div className="market">
         {available.map((prop) => (
           <div key={prop.id} className="market__item">
@@ -653,6 +777,16 @@ function Market({
             >
               Comprar {money(prop.price)}
             </button>
+            {/* "Propiedad gratis" (carta o ruleta de Parada Libre): se queda sin pagar. */}
+            {freebie && (
+              <button
+                className="market__free"
+                title="Usar tu carta de propiedad gratis: te la quedas sin pagar"
+                onClick={() => { act({ type: 'BUY_PROPERTY', playerId: me.id, propertyId: prop.id, price: 0 }); }}
+              >
+                🎁 Gratis
+              </button>
+            )}
           </div>
         ))}
         {available.length === 0 && <p className="hint">No quedan propiedades libres.</p>}
@@ -663,19 +797,27 @@ function Market({
 }
 
 function TradePanel({
-  me, others, act, money, close,
+  me, others, act, money, close, sym,
 }: {
   me: RuntimePlayer;
   others: RuntimePlayer[];
   act: ReturnType<typeof useGame>['act'];
   money: (n: number) => string;
   close: () => void;
+  sym: string;
 }) {
   const [otherId, setOtherId] = useState<string>(others[0]?.id ?? '');
   const [aCash, setACash] = useState('');
   const [bCash, setBCash] = useState('');
   const [aProps, setAProps] = useState<string[]>([]);
   const [bProps, setBProps] = useState<string[]>([]);
+  // Índices (no ids) para poder ofrecer una de varias copias iguales.
+  const [aCards, setACards] = useState<number[]>([]);
+  const [bCards, setBCards] = useState<number[]>([]);
+  const [aSpins, setASpins] = useState(0);
+  const [bSpins, setBSpins] = useState(0);
+  const [aBonus, setABonus] = useState(0);
+  const [bBonus, setBBonus] = useState(0);
   const other = others.find((p) => p.id === otherId);
 
   if (!other) return <div className="form"><h2>Negociar</h2><p className="hint">No hay otros jugadores.</p></div>;
@@ -686,8 +828,29 @@ function TradePanel({
 
   const nA = parseInt(aCash, 10) || 0;
   const nB = parseInt(bCash, 10) || 0;
-  const nothing = nA === 0 && nB === 0 && aProps.length === 0 && bProps.length === 0;
-  const valid = !nothing && me.cash >= nA && other.cash >= nB;
+  const aCardIds = aCards.map((i) => me.tokens[i]).filter(Boolean);
+  const bCardIds = bCards.map((i) => other.tokens[i]).filter(Boolean);
+  const nothing =
+    nA === 0 && nB === 0 && aProps.length === 0 && bProps.length === 0 &&
+    aCardIds.length === 0 && bCardIds.length === 0 &&
+    aSpins === 0 && bSpins === 0 && aBonus === 0 && bBonus === 0;
+  const valid =
+    !nothing && me.cash >= nA && other.cash >= nB &&
+    me.spins >= aSpins && other.spins >= bSpins &&
+    me.bonus >= aBonus && other.bonus >= bBonus;
+
+  const toggleIdx = (list: number[], set: (v: number[]) => void, i: number) =>
+    set(list.includes(i) ? list.filter((x) => x !== i) : [...list, i]);
+
+  /** Selector de fichas (giro / bonificación) con tope en las que posee. */
+  const tokenRow = (label: string, emoji: string, has: number, value: number, set: (n: number) => void) =>
+    has > 0 && (
+      <label className="tradetok">
+        <span>{emoji} {label} <small>({has})</small></span>
+        <input type="number" min={0} max={has} value={value}
+          onChange={(e) => set(Math.max(0, Math.min(has, parseInt(e.target.value, 10) || 0)))} />
+      </label>
+    );
 
   const column = (
     p: RuntimePlayer,
@@ -695,6 +858,12 @@ function TradePanel({
     setCash: (v: string) => void,
     sel: string[],
     setSel: (v: string[]) => void,
+    cardSel: number[],
+    setCardSel: (v: number[]) => void,
+    spins: number,
+    setSpins: (n: number) => void,
+    bonus: number,
+    setBonus: (n: number) => void,
   ) => (
     <div className="tradecol">
       <h3>{p.icon} {p.name}</h3>
@@ -703,6 +872,27 @@ function TradePanel({
         <input inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, ''))} placeholder="0" />
       </label>
       <p className="hint">Efectivo: {money(p.cash)}</p>
+
+      {p.tokens.length > 0 && (
+        <div className="tradecards">
+          {p.tokens.map((cardId, i) => {
+            const c = getCard(cardId);
+            if (!c) return null;
+            return (
+              <button
+                key={`${cardId}-${i}`}
+                className={cardSel.includes(i) ? 'tradecard tradecard--on' : 'tradecard'}
+                title={cardText(c, sym)}
+                onClick={() => toggleIdx(cardSel, setCardSel, i)}
+              >
+                {c.emoji}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {tokenRow('fichas de giro', '🎡', p.spins, spins, setSpins)}
+      {tokenRow('de bonificación', '⭐', p.bonus, bonus, setBonus)}
       <div className="tradeprops">
         {tradeable(p).length === 0 && <p className="hint">Sin propiedades negociables.</p>}
         {tradeable(p).map((h) => {
@@ -730,16 +920,22 @@ function TradePanel({
           ))}
         </div>
       )}
-      <p className="hint">Las propiedades con casas no aparecen. Las hipotecadas se transfieren tal cual (el nuevo dueño las deshipoteca después).</p>
+      <p className="hint">Las propiedades con casas no aparecen. Las hipotecadas se transfieren tal cual (el nuevo dueño las deshipoteca después). También puedes intercambiar cartas guardadas 🃏 y fichas 🎡⭐.</p>
       <div className="tradegrid">
-        {column(me, aCash, setACash, aProps, setAProps)}
-        {column(other, bCash, setBCash, bProps, setBProps)}
+        {column(me, aCash, setACash, aProps, setAProps, aCards, setACards, aSpins, setASpins, aBonus, setABonus)}
+        {column(other, bCash, setBCash, bProps, setBProps, bCards, setBCards, bSpins, setBSpins, bBonus, setBBonus)}
       </div>
       <button
         className="confirm"
         disabled={!valid}
         onClick={() => {
-          act({ type: 'PROPOSE_TRADE', trade: { aId: me.id, bId: other.id, aCash: nA, bCash: nB, aProps, bProps } });
+          act({
+            type: 'PROPOSE_TRADE',
+            trade: {
+              aId: me.id, bId: other.id, aCash: nA, bCash: nB, aProps, bProps,
+              aCards: aCardIds, bCards: bCardIds, aSpins, bSpins, aBonus, bBonus,
+            },
+          });
           close();
         }}
       >
@@ -807,6 +1003,204 @@ function DiceView({ dice, onRoll, canRoll }: {
   );
 }
 
+/**
+ * Barra de la modalidad Parada Libre: el bote acumulado y quién lleva la
+ * limusina dorada. El bote se alimenta a mano (impuestos, multas, ruleta)
+ * porque la app no sabe en qué casilla cae cada ficha.
+ */
+function ParadaLibreBar({ state, act, money, me, canControl }: {
+  state: GameState;
+  act: ReturnType<typeof useGame>['act'];
+  money: (n: number) => string;
+  me: RuntimePlayer | null;
+  canControl: (pid: string) => boolean;
+}) {
+  const [amount, setAmount] = useState(100);
+  const limo = state.players.find((p) => p.id === state.limoPlayerId) ?? null;
+  const turn = state.players[state.turnIndex];
+  const canAct = !!turn && canControl(turn.id);
+
+  return (
+    <div className="parada">
+      <span className="parada__pot" title="Dinero acumulado en la Parada Libre">
+        🅿️ Bote: <b>{money(state.pot)}</b>
+      </span>
+
+      {canAct && (
+        <span className="parada__add">
+          <input
+            type="number"
+            min={0}
+            step={25}
+            value={amount}
+            onChange={(e) => setAmount(Math.max(0, parseInt(e.target.value, 10) || 0))}
+            title="Cuánto entra al bote"
+          />
+          <button onClick={() => act({ type: 'POT_ADD', amount })} title="El banco recibe un impuesto: va al bote">
+            + Banco
+          </button>
+          <button
+            onClick={() => act({ type: 'POT_ADD', amount, playerId: turn.id })}
+            title={`${turn.name} paga al bote`}
+          >
+            + {turn.icon}
+          </button>
+          <button
+            className="parada__take"
+            disabled={state.pot <= 0}
+            onClick={() => act({ type: 'POT_TAKE', playerId: turn.id })}
+            title="El jugador en turno se lleva el bote"
+          >
+            🎰 Cobrar
+          </button>
+        </span>
+      )}
+
+      <span className="parada__limo" title="La limusina dorada: propiedades libres gratis y no pagas renta">
+        🚘 {limo ? `${limo.icon} ${limo.name}` : '—'}
+      </span>
+      {me && (
+        <button
+          className="parada__land"
+          title="Caíste en la casilla: te llevas el Gran Premio, la limusina y una tarjeta de Bonificación"
+          onClick={() => {
+            if (confirm('¿Caíste en la Parada Libre?\n\nTe llevas el bote, la limusina 🚘 y una tarjeta de Bonificación ⭐.')) {
+              act({ type: 'LAND_FREE_PARKING', playerId: me.id });
+            }
+          }}
+        >
+          🅿️ ¡Caí aquí!
+        </button>
+      )}
+      {limo && canControl(limo.id) && (
+        <button className="parada__claim" onClick={() => act({ type: 'SET_LIMO', playerId: null })} title="Vas a la cárcel: pierdes la limusina">
+          Soltar
+        </button>
+      )}
+
+      {me && (
+        <button
+          className="parada__spin"
+          disabled={me.spins <= 0 || !!state.wheel}
+          title={me.spins > 0 ? 'Gasta una ficha y gira (ganas una tarjeta de Bonificación)' : 'No te quedan fichas de giro'}
+          onClick={() => act({ type: 'SPIN_WHEEL', playerId: me.id })}
+        >
+          🎡 Girar ({me.spins})
+        </button>
+      )}
+      {me && (
+        <button
+          className="parada__claim"
+          disabled={state.settings.maxSpins > 0 && me.spins >= state.settings.maxSpins}
+          title={`Perdonas la renta a quien cayó en tu propiedad y tomas una ficha de giro${state.settings.maxSpins > 0 ? ` (tope: ${state.settings.maxSpins})` : ''}`}
+          onClick={() => act({ type: 'RENT_TO_SPIN', ownerId: me.id })}
+        >
+          🤝 Renta → ficha
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Resultado de la ruleta, a pantalla completa para toda la sala. */
+function WheelModal({ state, act, canAct }: {
+  state: GameState;
+  act: ReturnType<typeof useGame>['act'];
+  canAct: boolean;
+}) {
+  const w = state.wheel!;
+  const face = getWheelFace(w.faceId);
+  const player = state.players.find((p) => p.id === w.playerId);
+  if (!face || !player) return null;
+  const good = face.tone === 'good';
+  return (
+    <div className="overlay overlay--card">
+      <div className="wheel" style={{ ['--tone' as string]: good ? '#16a34a' : '#dc2626' }}>
+        <header className="wheel__band">🎡 LA RULETA</header>
+        <div className="wheel__dial">
+          {WHEEL.map((f) => (
+            <span key={f.id} className={`wheel__seg ${f.id === face.id ? 'wheel__seg--hit' : ''} ${f.tone === 'good' ? 'is-good' : 'is-bad'}`} />
+          ))}
+          <span className="wheel__emoji">{face.emoji}</span>
+        </div>
+        <p className="wheel__text">{wheelText(face, state.currencySymbol)}</p>
+        <div className="wheel__who">{player.icon} <b>{player.name}</b> · +1 ⭐ tarjeta de Bonificación</div>
+        {canAct
+          ? <button className="confirm" onClick={() => act({ type: 'CLOSE_WHEEL' })}>Continuar</button>
+          : <p className="gcard__hint">Esperando a {player.name}…</p>}
+      </div>
+    </div>
+  );
+}
+
+/** Cartas que quedan por robar en un mazo (contando el descarte, que se rebaraja). */
+function deckLeft(state: GameState, d: DeckId): number {
+  const deck = state.decks[d];
+  return deck.draw.length + deck.discard.length;
+}
+
+/**
+ * Carta robada, a pantalla completa y visible para toda la sala.
+ * Solo quien controla al jugador puede resolverla.
+ */
+function CardModal({ drawn, state, act, money, canAct }: {
+  drawn: NonNullable<GameState['drawnCard']>;
+  state: GameState;
+  act: ReturnType<typeof useGame>['act'];
+  money: (n: number) => string;
+  canAct: boolean;
+}) {
+  const card = getCard(drawn.cardId);
+  const player = state.players.find((p) => p.id === drawn.playerId);
+  if (!card || !player) return null;
+
+  const deck = DECKS[card.deck];
+  const e = card.effect;
+  const auto = isAutomatic(e);
+
+  // Qué dice el botón principal según el efecto.
+  let action = auto ? 'Aplicar' : 'Entendido';
+  if (e.kind === 'bank_pay') action = `Cobrar ${money(e.amount)}`;
+  if (e.kind === 'bank_charge') action = `Pagar ${money(e.amount)}`;
+  if (e.kind === 'collect_each') action = `Cobrar ${money(e.amount)} a cada uno`;
+  if (e.kind === 'pay_each') action = `Pagar ${money(e.amount)} a cada uno`;
+  if (card.keep) action = 'Guardar carta';
+  if (e.kind === 'goto' && e.bonus) action = `Mover y cobrar ${money(e.bonus)}`;
+  if (e.kind === 'repairs') {
+    const b = playerBuildings(player);
+    const total = b.houses * e.perHouse + b.hotels * e.perHotel;
+    action = total > 0
+      ? `Pagar ${money(total)} (${b.houses}🏠 · ${b.hotels}🏨)`
+      : 'Sin construcciones: no pagas nada';
+  }
+
+  return (
+    <div className="overlay overlay--card">
+      <div className="gcard" style={{ ['--deck-color' as string]: deck.color }}>
+        <header className="gcard__band">{deck.emoji} {deck.label}</header>
+        <div className="gcard__emoji">{card.emoji}</div>
+        <p className="gcard__text">{cardText(card, state.currencySymbol)}</p>
+        <div className="gcard__who">Para {player.icon} <b>{player.name}</b></div>
+
+        {!auto && <p className="gcard__hint">Mueve tu ficha en el tablero. La app no cambia dinero por esta carta.</p>}
+
+        {canAct ? (
+          <div className="gcard__btns">
+            {e.kind === 'goto' && e.collectGo && (
+              <button className="gcard__go" onClick={() => act({ type: 'CLAIM_GO_BONUS', playerId: player.id })}>
+                🟢 Pasé por SALIDA
+              </button>
+            )}
+            <button className="confirm" onClick={() => act({ type: 'RESOLVE_CARD' })}>{action}</button>
+          </div>
+        ) : (
+          <p className="gcard__hint">Esperando a {player.name}…</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PendingTradeBanner({ trade, players, act, money, canRespond }: {
   trade: PendingTrade;
   players: RuntimePlayer[];
@@ -817,16 +1211,22 @@ function PendingTradeBanner({ trade, players, act, money, canRespond }: {
   const A = players.find((p) => p.id === trade.aId);
   const B = players.find((p) => p.id === trade.bId);
   const nm = (ids: string[]) => ids.map((id) => getProperty(id)?.name ?? id).join(', ');
-  const side = (cash: number, props: string[]) => {
-    const parts = [cash ? money(cash) : '', props.length ? nm(props) : ''].filter(Boolean);
+  const side = (cash: number, props: string[], cards: string[] = [], spins = 0, bonus = 0) => {
+    const parts = [
+      cash ? money(cash) : '',
+      props.length ? nm(props) : '',
+      cards.length ? cards.map((id) => getCard(id)?.emoji ?? '🃏').join('') : '',
+      spins ? `${spins}🎡` : '',
+      bonus ? `${bonus}⭐` : '',
+    ].filter(Boolean);
     return parts.length ? parts.join(' + ') : 'nada';
   };
   return (
     <div className="tradebanner">
       <h3>🤝 Negociación en proceso</h3>
       <div className="tradebanner__detail">
-        <b>{A?.icon} {A?.name}</b> ofrece: {side(trade.aCash, trade.aProps)}<br />
-        <b>{B?.icon} {B?.name}</b> ofrece: {side(trade.bCash, trade.bProps)}
+        <b>{A?.icon} {A?.name}</b> ofrece: {side(trade.aCash, trade.aProps, trade.aCards, trade.aSpins, trade.aBonus)}<br />
+        <b>{B?.icon} {B?.name}</b> ofrece: {side(trade.bCash, trade.bProps, trade.bCards, trade.bSpins, trade.bBonus)}
       </div>
       {canRespond ? (
         <div className="tradebanner__btns">
@@ -992,10 +1392,16 @@ function BoardOverview({ state, money, close }: {
   );
 }
 
-function IdentityPicker({ players, onPick, deviceId }: { players: RuntimePlayer[]; onPick: (id: string) => void; deviceId: string }) {
+function IdentityPicker({ players, onPick, deviceId, code, onNewRoom }: {
+  players: RuntimePlayer[];
+  onPick: (id: string) => void;
+  deviceId: string;
+  code: string;
+  onNewRoom: () => void;
+}) {
   return (
     <div className="setup">
-      <h1>¿Quién usa este dispositivo?</h1>
+      <h1>¿Quién usa este dispositivo? <span className="code">Sala {code}</span></h1>
       <p className="hint">Elige tu jugador: solo podrás mover tu propio dinero. Los administradores 🛡️ pueden operar a todos.</p>
       <div className="idgrid">
         {players.map((p) => {
@@ -1022,15 +1428,82 @@ function IdentityPicker({ players, onPick, deviceId }: { players: RuntimePlayer[
         <span className="idbtn__icon">📺</span>
         <span>Solo ver (modo TV)</span>
       </button>
+
+      <h2>¿No es tu partida?</h2>
+      <p className="hint">Sal de esta sala y crea una nueva para empezar de cero.</p>
+      <button className="confirm" onClick={onNewRoom}>➕ Crear una sala nueva</button>
     </div>
   );
 }
 
-function SetupScreen({ state, act, share, onJoin }: {
+/**
+ * Selector de modalidades de cartas: un desplegable por modalidad, con el
+ * interruptor en la cabecera y el listado completo de sus cartas dentro.
+ */
+function CardPacksPanel({ packs, setPacks, sym }: {
+  packs: string[];
+  setPacks: (packs: string[]) => void;
+  sym: string;
+}) {
+  const total = CARDS.filter((c) => packs.includes(c.pack)).length;
+  const toggle = (id: string, on: boolean) =>
+    setPacks(on ? [...packs, id] : packs.filter((x) => x !== id));
+
+  return (
+    <>
+      <h2>Cartas — modalidades de juego</h2>
+      <p className="hint">
+        Los mazos de 📦 Arca Comunal y ❓ Fortuna se arman al empezar la partida.
+        Ahora mismo: <b>{total} cartas</b> en juego.
+      </p>
+      <div className="packs">
+        {Object.entries(PACKS).map(([id, pack]) => {
+          const on = packs.includes(id);
+          const cards = CARDS.filter((c) => c.pack === id);
+          return (
+            <details key={id} className={`pack ${on ? 'pack--on' : ''}`} style={{ ['--pack-color' as string]: pack.color }}>
+              <summary className="pack__head">
+                <span className="pack__emoji">{pack.emoji}</span>
+                <span className="pack__body">
+                  <b>{pack.label}</b> <small>{packSize(id)} cartas</small>
+                  <br /><span className="hint">{pack.desc}</span>
+                </span>
+                <span className="pack__toggle" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={pack.fixed}
+                    title={pack.fixed ? 'Siempre activa' : on ? 'Quitar del juego' : 'Añadir al juego'}
+                    onChange={(e) => toggle(id, e.target.checked)}
+                  />
+                </span>
+              </summary>
+              {pack.todo && <p className="pack__todo">⚠️ {pack.todo}</p>}
+              <ul className="pack__cards">
+                {cards.map((c) => (
+                  <li key={c.id}>
+                    <span className="pack__cardemoji">{c.emoji}</span>
+                    <span className="pack__cardtext">{cardText(c, sym)}</span>
+                    <span className={`pack__tag ${isAutomatic(c.effect) ? 'pack__tag--auto' : ''}`}>
+                      {DECKS[c.deck].emoji} {isAutomatic(c.effect) ? 'automática' : 'manual'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
   state: GameState;
   act: ReturnType<typeof useGame>['act'];
   share: () => void;
   onJoin: (code: string) => void;
+  onNewRoom: () => void;
 }) {
   const [name, setName] = useState('');
   const [icon, setIcon] = useState(EMOJIS[0]);
@@ -1045,6 +1518,7 @@ function SetupScreen({ state, act, share, onJoin }: {
       <div className="setup__top">
         <button onClick={share}>🔗 Compartir enlace</button>
         <button onClick={() => { const c = prompt('Código de sala a la que unirse:'); if (c) onJoin(c); }}>Unirse a otra sala</button>
+        <button onClick={onNewRoom} title="Empezar de cero en una sala con código nuevo">➕ Sala nueva</button>
       </div>
 
       <h2>Jugadores ({state.players.length}) — orden de juego</h2>
@@ -1091,6 +1565,21 @@ function SetupScreen({ state, act, share, onJoin }: {
       <label className="setrow"><input type="checkbox" checked={s.special} onChange={(e) => setS({ special: e.target.checked })} /> <span><b>Dado especial</b></span></label>
       <label className="setrow"><input type="checkbox" checked={s.sound} onChange={(e) => setS({ sound: e.target.checked })} /> <span><b>Sonido</b></span></label>
       <label className="setrow"><input type="checkbox" checked={s.voice} onChange={(e) => setS({ voice: e.target.checked })} /> <span><b>Voz</b></span></label>
+
+      <CardPacksPanel packs={s.cardPacks} setPacks={(cardPacks) => setS({ cardPacks })} sym={state.currencySymbol} />
+      {s.cardPacks.includes('parada-libre') && (
+        <label className="setrow setrow--num">
+          <span>
+            <b>Tope de fichas de giro</b><br />
+            <span className="hint">
+              Máximo que se puede acumular perdonando rentas. Evita que dos jugadores pacten
+              no cobrarse para fabricar fichas gratis del banco. 0 = sin tope.
+            </span>
+          </span>
+          <input type="number" min={0} max={9} value={s.maxSpins}
+            onChange={(e) => setS({ maxSpins: Math.max(0, parseInt(e.target.value, 10) || 0) })} />
+        </label>
+      )}
 
       <button className="confirm setup__start" disabled={state.players.length < 1} onClick={() => act({ type: 'START_GAME' })}>
         ▶ Empezar partida

@@ -228,3 +228,182 @@
 /* Pagar renta */
 .b-payrent { width: 100%; margin-top: 0.4rem; background: #b45309; color: #fff; border: 0; border-radius: 8px; padding: 0.5rem; cursor: pointer; font-size: 0.85rem; }
 .b-payrent:disabled { background: #cbd5e1; color: #64748b; cursor: not-allowed; }
+
+/* ─── Cartas: Arca Comunal y Fortuna ─── */
+.turnbar__decks { display: inline-flex; gap: 0.3rem; }
+.deckbtn {
+  background: var(--deck-color); color: #10231b; border: 0; border-radius: 8px;
+  padding: 0.35rem 0.55rem; cursor: pointer; font-size: 1rem; line-height: 1;
+  display: inline-flex; align-items: center; gap: 0.25rem;
+}
+.deckbtn small { font-size: 0.7rem; opacity: 0.75; font-weight: 700; }
+.deckbtn:disabled { background: #cbd5e1; color: #64748b; cursor: not-allowed; opacity: 0.85; }
+
+.overlay--card { align-items: center; z-index: 20; }
+.gcard {
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  width: min(92vw, 420px); overflow: hidden; text-align: center;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+.gcard__band {
+  background: var(--deck-color); color: #10231b; font-weight: 800;
+  letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.9rem; padding: 0.7rem;
+}
+.gcard__emoji { font-size: 3.4rem; margin: 0.8rem 0 0.2rem; }
+.gcard__text { margin: 0 1.2rem 0.8rem; font-size: 1.05rem; line-height: 1.45; }
+.gcard__who { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.4rem; }
+.gcard__hint { color: var(--muted); font-size: 0.82rem; margin: 0 1.2rem 0.8rem; }
+.gcard__btns { display: flex; flex-direction: column; gap: 0.4rem; padding: 0 1rem 1rem; }
+.gcard__btns .confirm { margin-top: 0; }
+.gcard__go { background: var(--green); color: #fff; border: 0; border-radius: 10px; padding: 0.6rem; cursor: pointer; }
+
+.ptile__token { background: #fde68a; color: #78350f; border: 0; border-radius: 6px; padding: 0.1rem 0.4rem; cursor: pointer; font-size: 0.78rem; }
+
+/* Modalidades de cartas (preparación) */
+.packs { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.6rem 0; }
+.pack {
+  background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--pack-color, var(--line));
+  border-radius: 10px; overflow: hidden;
+}
+.pack--on { border-color: var(--pack-color, var(--green)); }
+.pack__head {
+  display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.7rem; cursor: pointer;
+  list-style: none; user-select: none;
+}
+.pack__head::-webkit-details-marker { display: none; }
+.pack__head::before { content: '▸'; color: var(--muted); margin-top: 0.15rem; transition: transform 0.15s; }
+.pack[open] .pack__head::before { transform: rotate(90deg); }
+.pack__emoji { font-size: 1.6rem; line-height: 1; }
+.pack__body { flex: 1 1 auto; min-width: 0; font-size: 0.95rem; }
+.pack__body small { color: var(--muted); font-weight: 600; }
+.pack__toggle { flex: 0 0 auto; display: flex; align-items: center; padding-top: 0.2rem; }
+.pack__toggle input { width: 1.15rem; height: 1.15rem; accent-color: var(--pack-color, var(--green)); }
+.pack__todo {
+  margin: 0 0.7rem 0.6rem; padding: 0.5rem 0.6rem; background: #fef3c7; color: #78350f;
+  border-radius: 8px; font-size: 0.82rem;
+}
+.pack__cards { list-style: none; margin: 0; padding: 0 0.7rem 0.7rem; }
+.pack__cards li {
+  display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.45rem 0;
+  border-top: 1px solid var(--line); font-size: 0.85rem;
+}
+.pack__cardemoji { flex: 0 0 auto; font-size: 1.1rem; line-height: 1.3; }
+.pack__cardtext { flex: 1 1 auto; min-width: 0; }
+.pack__tag {
+  flex: 0 0 auto; font-size: 0.7rem; color: var(--muted); background: #f1f5f9;
+  border-radius: 999px; padding: 0.12rem 0.5rem; white-space: nowrap;
+}
+.pack__tag--auto { background: #dcfce7; color: #166534; }
+
+/* ─── Parada Libre: bote y limusina ─── */
+.parada {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+  background: linear-gradient(90deg, #0e7490 0%, #0891b2 100%); color: #ecfeff;
+  border-radius: 10px; padding: 0.5rem 0.7rem; margin-bottom: 0.6rem; font-size: 0.9rem;
+}
+.parada__pot b { font-size: 1.05rem; }
+.parada__add { display: inline-flex; gap: 0.3rem; align-items: center; }
+.parada__add input {
+  width: 5.5rem; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3);
+  border-radius: 6px; padding: 0.25rem 0.4rem; color: #fff; font-size: 0.85rem;
+}
+.parada__add button, .parada__claim {
+  background: rgba(255,255,255,.18); color: #fff; border: 1px solid rgba(255,255,255,.3);
+  border-radius: 6px; padding: 0.3rem 0.5rem; cursor: pointer; font-size: 0.82rem;
+}
+.parada__add button:hover, .parada__claim:hover { background: rgba(255,255,255,.3); }
+.parada__take { background: #eab308 !important; color: #422006 !important; font-weight: 700; }
+.parada__take:disabled { opacity: 0.45; cursor: not-allowed; }
+.parada__limo { margin-left: auto; background: rgba(0,0,0,.2); border-radius: 999px; padding: 0.2rem 0.6rem; }
+
+/* Mano de cartas guardadas */
+.ptile__hand { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.5rem; }
+.ptile__card {
+  background: #fef9c3; color: #713f12; border: 1px solid #fde047; border-radius: 6px;
+  padding: 0.15rem 0.45rem; cursor: pointer; font-size: 0.8rem;
+}
+.ptile__card--ro { cursor: default; opacity: 0.8; }
+
+/* ─── Ruleta (Parada Libre) ─── */
+.parada__spin {
+  background: #eab308; color: #422006; border: 0; border-radius: 6px;
+  padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.82rem; font-weight: 700;
+}
+.parada__spin:disabled { opacity: 0.45; cursor: not-allowed; }
+.parada__claim:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.wheel {
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  width: min(92vw, 380px); overflow: hidden; text-align: center; padding-bottom: 1rem;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+.wheel__band {
+  background: var(--tone); color: #fff; font-weight: 800; letter-spacing: 0.12em;
+  padding: 0.7rem; font-size: 0.95rem;
+}
+/* Disco de 8 sectores; el que salió se resalta. */
+.wheel__dial {
+  position: relative; width: 150px; height: 150px; margin: 1rem auto 0.6rem;
+  border-radius: 50%; border: 4px solid var(--tone); overflow: hidden;
+  display: grid; place-items: center;
+}
+.wheel__seg {
+  position: absolute; inset: 0; clip-path: polygon(50% 50%, 50% 0, 85% 4%);
+  transform-origin: 50% 50%;
+}
+.wheel__seg:nth-child(1) { transform: rotate(0deg); }
+.wheel__seg:nth-child(2) { transform: rotate(45deg); }
+.wheel__seg:nth-child(3) { transform: rotate(90deg); }
+.wheel__seg:nth-child(4) { transform: rotate(135deg); }
+.wheel__seg:nth-child(5) { transform: rotate(180deg); }
+.wheel__seg:nth-child(6) { transform: rotate(225deg); }
+.wheel__seg:nth-child(7) { transform: rotate(270deg); }
+.wheel__seg:nth-child(8) { transform: rotate(315deg); }
+.wheel__seg.is-good { background: #16a34a; }
+.wheel__seg.is-bad { background: #dc2626; }
+.wheel__seg--hit { filter: brightness(1.6); }
+.wheel__emoji {
+  position: relative; z-index: 2; font-size: 2.6rem;
+  background: var(--card); width: 84px; height: 84px; border-radius: 50%;
+  display: grid; place-items: center;
+}
+.wheel__text { margin: 0 1.2rem 0.6rem; font-size: 1.05rem; line-height: 1.4; }
+.wheel__who { color: var(--muted); font-size: 0.88rem; margin-bottom: 0.8rem; }
+.wheel .confirm { width: calc(100% - 2rem); margin: 0 1rem; }
+
+/* Negociación: cartas guardadas y fichas */
+.tradecards { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.4rem 0; }
+.tradecard {
+  background: #fef9c3; border: 2px solid #fde047; border-radius: 8px;
+  padding: 0.25rem 0.5rem; cursor: pointer; font-size: 1.15rem; line-height: 1;
+}
+.tradecard--on { border-color: var(--green); background: #dcfce7; }
+.tradetok {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  font-size: 0.82rem; color: var(--muted); margin: 0.25rem 0;
+}
+.tradetok input {
+  width: 3.5rem; background: var(--card); border: 1px solid var(--line);
+  border-radius: 6px; padding: 0.25rem; text-align: center; color: var(--ink);
+}
+.parada__land {
+  background: #fff; color: #0e7490; border: 0; border-radius: 6px;
+  padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.82rem; font-weight: 700;
+}
+
+/* Cárcel */
+.b-jail { background: #4b5563; color: #fff; border: 0; border-radius: 8px; padding: 0.5rem 0.6rem; cursor: pointer; }
+.ptile__jail {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem;
+  background: #e5e7eb; color: #374151; border-radius: 8px;
+  padding: 0.35rem 0.5rem; margin-bottom: 0.5rem; font-size: 0.8rem;
+}
+.ptile__jailbtns { margin-left: auto; display: flex; gap: 0.3rem; }
+.ptile__jailbtns button {
+  background: #4b5563; color: #fff; border: 0; border-radius: 6px;
+  padding: 0.2rem 0.5rem; cursor: pointer; font-size: 0.78rem;
+}
+.market__free {
+  width: 100%; margin-top: 0.3rem; background: #eab308; color: #422006;
+  border: 0; border-radius: 8px; padding: 0.45rem; cursor: pointer; font-weight: 700; font-size: 0.85rem;
+}

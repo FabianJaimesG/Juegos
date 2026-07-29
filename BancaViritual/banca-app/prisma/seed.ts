@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client';
 import { PROPERTIES } from '../src/domain/board';
+import { CARDS } from '../src/domain/cards';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -34,7 +35,21 @@ async function main() {
     });
     n += 1;
   }
-  console.log(`Seed OK: ${n} propiedades.`);
+
+  let c = 0;
+  for (const card of CARDS) {
+    const data = {
+      deck: card.deck, pack: card.pack, text: card.text, emoji: card.emoji,
+      effect: card.effect, keep: card.keep ?? false, copies: card.copies ?? 1,
+    };
+    await prisma.card.upsert({
+      where: { id: card.id },
+      update: data,
+      create: { id: card.id, ...data },
+    });
+    c += 1;
+  }
+  console.log(`Seed OK: ${n} propiedades, ${c} cartas.`);
 }
 
 main()

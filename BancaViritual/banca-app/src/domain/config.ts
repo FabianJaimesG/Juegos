@@ -19,6 +19,11 @@ export const GAME_CONFIG = {
   /** Impuesto de lujo ("POSESIONES DE LUJO $100"). */
   luxuryTax: 100,
 
+  /** Fianza para salir de la cárcel. Clásico: 50. */
+  bail: 50,
+  /** Turnos que se puede permanecer en la cárcel antes de pagar la fianza a la fuerza. */
+  jailTurns: 3,
+
   /** Casas y hoteles disponibles en el banco (regla de escasez clásica). */
   bankHouses: 32,
   bankHotels: 12,

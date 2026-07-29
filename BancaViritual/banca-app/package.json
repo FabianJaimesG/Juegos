@@ -9,7 +9,9 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "db:seed": "tsx prisma/seed.ts",
-    "gen:cards": "tsx scripts/gen-cards.ts"
+    "gen:cards": "tsx scripts/gen-cards.ts",
+    "gen:cardart": "tsx scripts/gen-cardart.ts",
+    "test": "tsx scripts/test-batch.ts && tsx scripts/test-cards.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

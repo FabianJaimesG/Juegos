@@ -39,6 +39,35 @@ enum PropertyKind {
   special // salida, cárcel, impuestos, suerte, etc.
 }
 
+/// Catálogo de cartas (Arca Comunal / Fortuna). No depende de una partida.
+/// `pack` agrupa por MODALIDAD de juego: 'base' son las clásicas; el resto son
+/// expansiones (prision, parada-libre, todo-venta, banca-total, enredos…).
+/// Igual que Property: el runtime lee el catálogo del bundle; esta tabla es el
+/// espejo persistente que se puebla con `npm run db:seed`.
+model Card {
+  id     String @id // slug estable, p. ej. "arca-error-bancario"
+  deck   DeckId
+  pack   String
+  /// Texto de la carta. `{m}` se reemplaza por el símbolo de moneda.
+  text   String
+  emoji  String @default("🃏")
+  /// Efecto como unión discriminada: { kind: 'bank_pay', amount: 200 }.
+  effect Json
+  /// La carta se guarda en la mano en vez de descartarse (y es negociable).
+  keep   Boolean @default(false)
+  /// Cuántas copias entran al mazo.
+  copies Int     @default(1)
+
+  @@index([pack])
+  @@index([deck, pack])
+}
+
+enum DeckId {
+  arca
+  fortuna
+  bonificacion
+}
+
 /// Una partida (equivale a una "sala" en vivo). El estado se sincroniza por Realtime.
 model Game {
   id             String        @id @default(uuid())
