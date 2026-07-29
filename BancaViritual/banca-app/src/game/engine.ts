@@ -818,10 +818,21 @@ export function reducer(s: GameState, a: Action): GameState {
         const d = getCard(cardId)?.deck ?? 'arca';
         decks[d] = { ...decks[d], discard: [cardId, ...decks[d].discard] };
       }
+      // Su carta sin resolver se descarta con él: si no, quedaría pendiente para
+      // siempre y nadie podría robar otra (solo cabe una a la vez).
+      const drawn = s.drawnCard?.playerId === p.id ? getCard(s.drawnCard.cardId) : null;
+      if (drawn) {
+        decks[drawn.deck] = { ...decks[drawn.deck], discard: [drawn.id, ...decks[drawn.deck].discard] };
+      }
+      // Y una negociación suya a medias se cancela: bloquearía todas las demás.
+      const killTrade = !!s.pendingTrade && (s.pendingTrade.aId === p.id || s.pendingTrade.bId === p.id);
       return {
         ...s,
         players: mapPlayer(s, a.playerId, (x) => ({ ...x, bankrupt: true, cash: 0, holdings: [], tokens: [], spins: 0, freeHouses: 0, freeProps: 0, forceSwaps: 0 })),
         decks,
+        drawnCard: s.drawnCard?.playerId === p.id ? null : s.drawnCard,
+        wheel: s.wheel?.playerId === p.id ? null : s.wheel,
+        pendingTrade: killTrade ? null : s.pendingTrade,
         limoPlayerId: s.limoPlayerId === p.id ? null : s.limoPlayerId,
         log: log(s, `${p.name} se declaró en bancarrota (sus propiedades vuelven al banco)`),
       };

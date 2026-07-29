@@ -561,5 +561,35 @@ ok(!canCancelTrade(gN, jc, false), 'un tercero tampoco');
 const gLimpio = reducer(gN, { type: 'REJECT_TRADE' });
 ok(!canRespondToTrade(gLimpio, jb, false) && !canCancelTrade(gLimpio, ja, false), 'sin propuesta no hay nada que responder');
 
+console.log('33) La bancarrota limpia lo que dejaría atascado');
+// Caro roba una carta que no puede pagar y se declara en bancarrota.
+let gQ = { ...g, players: g.players.map((p) => (p.id === caro ? { ...p, cash: 20 } : p)) };
+gQ = run(stack(gQ, 'arca-hospital'), { type: 'DRAW_CARD', deck: 'arca', playerId: caro }, { type: 'RESOLVE_CARD' });
+ok(gQ.drawnCard !== null, 'la carta queda pendiente porque no le alcanza');
+ok(reducer(gQ, { type: 'DRAW_CARD', deck: 'fortuna', playerId: ana }) === gQ, 'y nadie más puede robar');
+const gQuit = reducer(gQ, { type: 'DECLARE_BANKRUPTCY', playerId: caro });
+ok(gQuit.drawnCard === null, 'al declararse en bancarrota, su carta pendiente desaparece');
+ok(gQuit.decks.arca.discard.includes('arca-hospital'), 'y vuelve al descarte');
+ok(reducer(gQuit, { type: 'DRAW_CARD', deck: 'fortuna', playerId: ana }).drawnCard !== null,
+  'el mazo vuelve a estar libre para los demás');
+// La carta pendiente de OTRO no se toca.
+let gOtro = run(stack(g, 'arca-hospital'), { type: 'DRAW_CARD', deck: 'arca', playerId: ana });
+gOtro = reducer(gOtro, { type: 'DECLARE_BANKRUPTCY', playerId: caro });
+ok(gOtro.drawnCard?.playerId === ana, 'la carta de otro jugador sigue en pie');
+// Ruleta y negociación suyas también se limpian.
+const gRul = reducer({ ...gPL, wheel: { faceId: 'w-100', playerId: pa } }, { type: 'DECLARE_BANKRUPTCY', playerId: pa });
+ok(gRul.wheel === null, 'su tirada de ruleta se cierra');
+let gTr = reducer(g, { type: 'PROPOSE_TRADE', trade: { aId: ana, bId: caro, aCash: 50, bCash: 0, aProps: [], bProps: [] } });
+ok(gTr.pendingTrade !== null, 'hay una negociación en curso');
+gTr = reducer(gTr, { type: 'DECLARE_BANKRUPTCY', playerId: caro });
+ok(gTr.pendingTrade === null, 'la negociación en la que participaba se cancela');
+// Una negociación ajena sobrevive.
+let gTr2 = run(g,
+  { type: 'ADD_PLAYER', name: 'Dani' },
+  { type: 'PROPOSE_TRADE', trade: { aId: ana, bId: beto, aCash: 50, bCash: 0, aProps: [], bProps: [] } },
+);
+gTr2 = reducer(gTr2, { type: 'DECLARE_BANKRUPTCY', playerId: caro });
+ok(gTr2.pendingTrade !== null, 'una negociación entre otros no se cancela');
+
 console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} ok, ${fail} fallidas`);
 process.exit(fail === 0 ? 0 : 1);
