@@ -243,9 +243,11 @@ export default function App() {
     return <IdentityPicker players={state.players} onPick={pickIdentity} deviceId={deviceId} code={state.code} onNewRoom={newRoom} />;
   }
 
-  const amAdmin = !!me?.admin;
-  const canControl = (pid: string) => !isViewer && (amAdmin || me?.id === pid);
-  const canEditRules = amAdmin || isViewer;
+  // El admin ÚNICO es la pantalla/TV (modo espectador): controla todo el juego.
+  // Los jugadores solo manejan su propio dinero; ya no hay admin por jugador.
+  const amAdmin = isViewer;
+  const canControl = (pid: string) => amAdmin || me?.id === pid;
+  const canEditRules = amAdmin;
   const turnPlayer = state.players[state.turnIndex];
   const myTurn = !!turnPlayer && canControl(turnPlayer.id);
 
@@ -264,7 +266,7 @@ export default function App() {
         <div className="topbar__actions">
           {(me || isViewer) && (
             <button onClick={leaveRoom} title="Salir de la sala (volver a elegir jugador / modo)">
-              {isViewer ? '📺 TV' : `${me!.icon} ${me!.name}${amAdmin ? ' 🛡️' : ''}`} 🚪
+              {isViewer ? '📺 Pantalla 🛡️' : `${me!.icon} ${me!.name}`} 🚪
             </button>
           )}
           <button onClick={undo} disabled={!canUndo} title="Deshacer">↶</button>
@@ -441,7 +443,7 @@ function PlayerTile({
   return (
     <article className={`ptile ${isCurrent ? 'ptile--current' : ''} ${canControl ? '' : 'ptile--other'} ${p.bankrupt ? 'ptile--bankrupt' : ''}`} style={{ ['--pc' as string]: color }}>
       <div className="ptile__head">
-        <span className="ptile__name">{p.icon} {p.name} {isCurrent && '⭐'} {p.admin && '🛡️'} {hasLimo && <span className="limo" title="Limusina dorada">🚗</span>} {p.jail > 0 && '🚔'} {p.bankrupt && '💀'}</span>
+        <span className="ptile__name">{p.icon} {p.name} {isCurrent && '⭐'} {hasLimo && <span className="limo" title="Limusina dorada">🚗</span>} {p.jail > 0 && '🚔'} {p.bankrupt && '💀'}</span>
         {canControl && <button className="ptile__edit" title="Editar personaje" onClick={() => onOpen('edit')}>✏️</button>}
       </div>
       <div className="ptile__cash">{money(p.cash)}</div>
@@ -1932,7 +1934,7 @@ function IdentityPicker({ players, onPick, deviceId, code, onNewRoom }: {
   return (
     <div className="setup">
       <h1>¿Quién usa este dispositivo? <span className="code">Sala {code}</span></h1>
-      <p className="hint">Elige tu jugador: solo podrás mover tu propio dinero. Los administradores 🛡️ pueden operar a todos.</p>
+      <p className="hint">Elige tu jugador: solo podrás mover tu propio dinero. La <b>pantalla</b> 🛡️ (abajo) es quien controla toda la partida.</p>
       <div className="idgrid">
         {players.map((p) => {
           // Un jugador tomado por OTRO dispositivo no puede robarse (sí re-confirmar el propio).
@@ -1947,16 +1949,16 @@ function IdentityPicker({ players, onPick, deviceId, code, onNewRoom }: {
               onClick={() => onPick(p.id)}
             >
               <span className="idbtn__icon">{p.icon}</span>
-              <span>{p.name} {p.admin && '🛡️'} {taken && '🔒'}</span>
+              <span>{p.name} {taken && '🔒'}</span>
             </button>
           );
         })}
       </div>
-      <h2>O como pantalla</h2>
-      <p className="hint">Ideal para un móvil/TV en la mesa que muestre la partida a todos, sin jugar.</p>
+      <h2>O como pantalla (control) 🛡️</h2>
+      <p className="hint">Para el móvil/TV en la mesa que muestra la partida a todos. Esta pantalla es el <b>admin único</b>: controla el banco, los turnos y las reglas de todos.</p>
       <button className="idbtn idbtn--tv" onClick={() => onPick(VIEWER)}>
         <span className="idbtn__icon">📺</span>
-        <span>Solo ver (modo TV)</span>
+        <span>Pantalla / control (admin)</span>
       </button>
 
       <h2>¿No es tu partida?</h2>
@@ -2134,7 +2136,6 @@ function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
   const [name, setName] = useState('');
   const [icon, setIcon] = useState(EMOJIS[0]);
   const [color, setColor] = useState(0);
-  const [admin, setAdmin] = useState(state.players.length === 0);
   const s = state.settings;
   const setS = (patch: Partial<GameSettings>) => act({ type: 'SET_SETTINGS', patch });
 
@@ -2154,11 +2155,10 @@ function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
       <ol className="setup__players">
         {state.players.map((p, i) => (
           <li key={p.id}>
-            <span className="setup__pname" style={{ color: PLAYER_COLOR(p.colorIndex) }}>{i + 1}. {p.icon} {p.name} {p.admin && '🛡️'}</span>
+            <span className="setup__pname" style={{ color: PLAYER_COLOR(p.colorIndex) }}>{i + 1}. {p.icon} {p.name}</span>
             <span className="setup__pbtns">
               <button onClick={() => act({ type: 'REORDER_PLAYER', playerId: p.id, dir: -1 })} disabled={i === 0}>▲</button>
               <button onClick={() => act({ type: 'REORDER_PLAYER', playerId: p.id, dir: 1 })} disabled={i === state.players.length - 1}>▼</button>
-              <button onClick={() => act({ type: 'EDIT_PLAYER', playerId: p.id, admin: !p.admin })}>{p.admin ? 'Quitar admin' : 'Hacer admin'}</button>
               <button onClick={() => act({ type: 'REMOVE_PLAYER', playerId: p.id })}>✕</button>
             </span>
           </li>
@@ -2172,10 +2172,9 @@ function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
         onSubmit={(e) => {
           e.preventDefault();
           if (!name.trim()) return;
-          act({ type: 'ADD_PLAYER', name, icon, colorIndex: color, admin });
+          act({ type: 'ADD_PLAYER', name, icon, colorIndex: color });
           setName('');
           setColor((color + 1) % PLAYER_COLORS.length);
-          setAdmin(false);
         }}
       >
         <div className="setup__preview">
@@ -2184,7 +2183,6 @@ function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
         </div>
         <div className="setup__addrow">
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del jugador" maxLength={16} />
-          <label className="setup__adminchk"><input type="checkbox" checked={admin} onChange={(e) => setAdmin(e.target.checked)} /> 🛡️ Admin</label>
           <button type="submit">+ Agregar</button>
         </div>
         <CharacterPicker icon={icon} colorIndex={color} onIcon={setIcon} onColor={setColor} />
