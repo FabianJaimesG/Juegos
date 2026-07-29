@@ -1,13 +1,16 @@
 :root {
   color-scheme: light;
-  /* Paleta clara "familiar" tipo tablero de Monopoly */
-  --bg: #eaf0e2;
+  /* Paleta sencilla y elegante: papel cálido neutro + acento verde/oro. */
+  --bg: #f3f1ec;
   --card: #ffffff;
-  --ink: #22332b;
-  --muted: #5f7468;
-  --line: #d6e0d1;
+  --ink: #232a27;
+  --muted: #6b746e;
+  --line: #e2ddd3;
   --green: #1f7a52;
   --green-d: #16603f;
+  /* Marco: banda oscura sobria con filo dorado. */
+  --frame: #1c3a2e;
+  --frame-gold: #c9a227;
 }
 
 html, body {

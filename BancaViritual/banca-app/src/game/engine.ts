@@ -234,7 +234,7 @@ interface SpecialFace {
 const SPECIAL_FACES: SpecialFace[] = [
   { id: 'x2', emoji: '✖️', label: '✖️ dobles (mueve el doble)', say: (a, b) => `${(a + b) * 2}` },
   { id: 'bonus6', emoji: '⚅', label: '⚅ +6 bonus', say: (a, b) => `${a + b + 6}` },
-  { id: 'choose', emoji: '🔀', label: '🔀 elige: un dado, el otro o ambos', say: (a, b) => `${a} o ${b} o ${a + b}` },
+  { id: 'choose', emoji: '／', label: '／ elige: un dado, el otro o ambos', say: (a, b) => `${a} o ${b} o ${a + b}` },
   { id: 'reroll', emoji: '🔄', label: '🔄 relanza', say: (a, b) => `${a + b}, relanza` },
   { id: 'skip', emoji: '🚫', label: '🚫 pierde turno', say: (a, b) => `${a + b}, pierde turno` },
   { id: 'next', emoji: '🏠', label: '🏠 avanza a la siguiente propiedad', say: (a, b) => `${a + b}, avanza a la siguiente propiedad` },

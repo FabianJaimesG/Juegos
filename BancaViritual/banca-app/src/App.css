@@ -557,19 +557,21 @@
   border-radius: 10px; width: 3rem; height: 3rem; box-shadow: 0 2px 4px rgba(0,0,0,.18);
 }
 .diceroll__die--sp {
-  background: linear-gradient(135deg, #fef3c7, #fcd34d); border: 4px solid #f59e0b;
-  border-radius: 18px; padding: 0.1em 0.15em; font-size: clamp(5rem, 28vw, 12rem);
+  background: linear-gradient(135deg, #fef3c7, #fcd34d); border: 3px solid #f59e0b;
+  border-radius: 14px; padding: 0.05em 0.1em; font-size: min(21vw, 7.5rem);
 }
 
-/* Overlay gigante y centrado de la tirada (aparece ~1s, no bloquea nada). */
+/* Overlay gigante y centrado de la tirada (aparece ~1s, no bloquea nada).
+   Los tamaños en vw dejan caber los 3 dados (con el especial) sin salirse. */
 .diceroll {
   position: fixed; inset: 0; z-index: 70; pointer-events: none;
-  display: flex; align-items: center; justify-content: center; gap: min(8vw, 3.5rem);
+  display: flex; align-items: center; justify-content: center; flex-wrap: nowrap; overflow: hidden;
+  gap: min(3vw, 1rem); padding: 0 2vw;
   background: rgba(10, 20, 15, 0.32);
   animation: diceroll-fade 0.15s ease-out;
 }
 .diceroll__die {
-  font-size: clamp(6rem, 34vw, 15rem); line-height: 1;
+  font-size: min(22vw, 8rem); line-height: 1; flex: 0 0 auto;
   filter: drop-shadow(0 12px 22px rgba(0,0,0,.55));
   animation: bv-tumble 0.35s linear infinite;
 }
@@ -579,7 +581,7 @@
 @keyframes diceroll-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes diceroll-pop {
   0% { transform: scale(0.5) rotate(-12deg); }
-  60% { transform: scale(1.18) rotate(4deg); }
+  60% { transform: scale(1.1) rotate(4deg); }
   100% { transform: scale(1) rotate(0); }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -651,32 +653,18 @@
   border: 1px solid #f59e0b;
 }
 
-/* ─── Marco decorativo estilo tablero (fijo, no bloquea: pointer-events:none) ─── */
+/* ─── Marco decorativo sobrio (fijo, no bloquea: pointer-events:none) ─── */
 .boardframe { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
-.boardframe__bar {
-  position: absolute;
-  /* Franjas de colores tipo casillas de Monopoly, en bucle. */
-  --seg: 26px;
-  --stripe-h: repeating-linear-gradient(90deg,
-    #7b4a2b 0 var(--seg), #7ec8e3 var(--seg) calc(2*var(--seg)),
-    #d3247e calc(2*var(--seg)) calc(3*var(--seg)), #f28f1c calc(3*var(--seg)) calc(4*var(--seg)),
-    #e2262b calc(4*var(--seg)) calc(5*var(--seg)), #f4d21b calc(5*var(--seg)) calc(6*var(--seg)),
-    #22a45c calc(6*var(--seg)) calc(7*var(--seg)), #1f6fb2 calc(7*var(--seg)) calc(8*var(--seg)));
-  --stripe-v: repeating-linear-gradient(180deg,
-    #7b4a2b 0 var(--seg), #7ec8e3 var(--seg) calc(2*var(--seg)),
-    #d3247e calc(2*var(--seg)) calc(3*var(--seg)), #f28f1c calc(3*var(--seg)) calc(4*var(--seg)),
-    #e2262b calc(4*var(--seg)) calc(5*var(--seg)), #f4d21b calc(5*var(--seg)) calc(6*var(--seg)),
-    #22a45c calc(6*var(--seg)) calc(7*var(--seg)), #1f6fb2 calc(7*var(--seg)) calc(8*var(--seg)));
-}
-.boardframe__bar--top { top: 0; left: 0; right: 0; height: 12px; background: var(--stripe-h); border-bottom: 2px solid #e8b923; }
-.boardframe__bar--bottom { bottom: 0; left: 0; right: 0; height: 12px; background: var(--stripe-h); border-top: 2px solid #e8b923; }
-.boardframe__bar--left { top: 0; bottom: 0; left: 0; width: 12px; background: var(--stripe-v); border-right: 2px solid #e8b923; }
-.boardframe__bar--right { top: 0; bottom: 0; right: 0; width: 12px; background: var(--stripe-v); border-left: 2px solid #e8b923; }
+.boardframe__bar { position: absolute; background: var(--frame); }
+.boardframe__bar--top { top: 0; left: 0; right: 0; height: 10px; border-bottom: 1.5px solid var(--frame-gold); }
+.boardframe__bar--bottom { bottom: 0; left: 0; right: 0; height: 10px; border-top: 1.5px solid var(--frame-gold); }
+.boardframe__bar--left { top: 0; bottom: 0; left: 0; width: 10px; border-right: 1.5px solid var(--frame-gold); }
+.boardframe__bar--right { top: 0; bottom: 0; right: 0; width: 10px; border-left: 1.5px solid var(--frame-gold); }
 .boardframe__corner {
   position: absolute; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
   font-size: 16px; line-height: 1;
   background: linear-gradient(135deg, #ffd856, #e8a712); border: 2px solid #b8860b; border-radius: 9px;
-  box-shadow: 0 2px 5px rgba(0,0,0,.35);
+  box-shadow: 0 2px 5px rgba(0,0,0,.3);
 }
 .boardframe__corner--tl { top: 3px; left: 3px; }
 .boardframe__corner--tr { top: 3px; right: 3px; }
