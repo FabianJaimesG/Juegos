@@ -1271,7 +1271,7 @@ function ParadaLibreBar({ state, act, money, me, canControl }: {
         <button
           className="parada__spin"
           disabled={me.spins <= 0 || !!state.wheel}
-          title={me.spins > 0 ? 'Gasta una ficha y gira (ganas una tarjeta de Bonificación)' : 'No te quedan fichas de giro'}
+          title={me.spins > 0 ? 'Gasta una ficha y gira la ruleta' : 'No te quedan fichas de giro'}
           onClick={() => act({ type: 'SPIN_WHEEL', playerId: me.id })}
         >
           🎡 Girar ({me.spins})
@@ -1435,7 +1435,7 @@ function WheelModal({ state, act, canAct, onHide }: {
         {!spinning && (
           <>
             <p className="wheel__text">{face.emoji} {wheelText(face, state.currencySymbol)}</p>
-            <div className="wheel__who">{player.icon} <b>{player.name}</b> · +1 ⭐ tarjeta de Bonificación</div>
+            <div className="wheel__who">{player.icon} <b>{player.name}</b></div>
           </>
         )}
         {spinning && <p className="wheel__text">Girando…</p>}

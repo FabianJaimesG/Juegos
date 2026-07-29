@@ -434,8 +434,7 @@ export function isAutomatic(e: CardEffect): boolean {
 
 // ═══════════════════ 🎡 RULETA (Parada Libre) ═══════════════════
 // Ocho sectores que alternan castigo (rojo → el dinero engorda el bote) y
-// premio (verde). Girar cuesta una ficha de giro y entrega, además, una ficha
-// de bonificación ("toma una tarjeta de Bonificación por cada giro").
+// premio (verde). Girar cuesta una ficha de giro y aplica la cara que salga.
 
 export interface WheelFace {
   id: string;
