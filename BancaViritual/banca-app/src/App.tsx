@@ -106,6 +106,17 @@ function BoardFrame({ rich = false }: { rich?: boolean }) {
       <span className="boardframe__corner boardframe__corner--tr">❓</span>
       <span className="boardframe__corner boardframe__corner--bl">🚂</span>
       <span className="boardframe__corner boardframe__corner--br">🏠</span>
+      {rich && (
+        <>
+          <span className="boardframe__deco boardframe__deco--dice">🎲</span>
+          <span className="boardframe__deco boardframe__deco--money">💵</span>
+          <span className="boardframe__deco boardframe__deco--city">🏙️</span>
+          <span className="boardframe__deco boardframe__deco--mono">🕴️</span>
+          <span className="boardframe__deco boardframe__deco--star1">✨</span>
+          <span className="boardframe__deco boardframe__deco--star2">⭐</span>
+          <span className="boardframe__deco boardframe__deco--bank">🏦</span>
+        </>
+      )}
     </div>
   );
 }
@@ -2128,8 +2139,8 @@ function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
   const setS = (patch: Partial<GameSettings>) => act({ type: 'SET_SETTINGS', patch });
 
   return (
-    <div className="setup">
-      <BoardFrame />
+    <div className="setup setup--framed">
+      <BoardFrame rich />
       <h1>🏦 Banca — Preparación <span className="code">Sala {state.code}</span></h1>
       <div className="setup__top">
         <button onClick={share}>🔗 Compartir enlace</button>
@@ -2157,6 +2168,7 @@ function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
 
       <form
         className="setup__add"
+        style={{ ['--pc' as string]: PLAYER_COLOR(color) }}
         onSubmit={(e) => {
           e.preventDefault();
           if (!name.trim()) return;
@@ -2166,6 +2178,10 @@ function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
           setAdmin(false);
         }}
       >
+        <div className="setup__preview">
+          <span className="setup__previewchip">{icon}</span>
+          <span className="setup__previewname">{name.trim() || 'Nuevo jugador'}</span>
+        </div>
         <div className="setup__addrow">
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del jugador" maxLength={16} />
           <label className="setup__adminchk"><input type="checkbox" checked={admin} onChange={(e) => setAdmin(e.target.checked)} /> 🛡️ Admin</label>

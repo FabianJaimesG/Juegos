@@ -53,8 +53,8 @@ export function WealthChart({ points, players, money }: Props) {
           const last = points[points.length - 1].nw;
           // Ordenados por capital actual, de mayor a menor.
           const ranked = [...players].sort((a, b) => (last[b.id] ?? 0) - (last[a.id] ?? 0));
-          // Medallas al podio solo si hay al menos 3 jugadores.
-          const medals = ranked.length >= 3 ? ['🥇', '🥈', '🥉'] : [];
+          // Medallas al podio (oro/plata/bronce) cuando hay al menos 2 jugadores.
+          const medals = ranked.length >= 2 ? ['🥇', '🥈', '🥉'] : [];
           return ranked.map((pl, i) => (
             <span key={pl.id} className="legenditem">
               <span className="dot" style={{ background: pl.color }} />

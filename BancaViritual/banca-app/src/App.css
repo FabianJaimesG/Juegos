@@ -108,8 +108,24 @@
 .setup__pname { font-weight: 600; }
 .setup__pbtns { display: flex; gap: 0.25rem; }
 .setup__pbtns button { background: #f1f5f0; border: 1px solid var(--line); border-radius: 6px; padding: 0.25rem 0.5rem; cursor: pointer; font-size: 0.8rem; }
-.setup__add { flex-direction: column; align-items: stretch; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0.7rem; margin-top: 0.4rem; }
+.setup__add {
+  --pc: #888;
+  flex-direction: column; align-items: stretch;
+  /* Se tiñe con el color elegido para el jugador nuevo. */
+  background: linear-gradient(180deg, color-mix(in srgb, var(--pc) 14%, var(--card)), var(--card) 96px);
+  border: 1px solid color-mix(in srgb, var(--pc) 35%, var(--line));
+  border-left: 5px solid var(--pc);
+  border-radius: 12px; padding: 0.7rem; margin-top: 0.4rem;
+}
 .setup__addrow { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.setup__preview { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.6rem; }
+.setup__previewchip {
+  width: 2.4rem; height: 2.4rem; display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; border-radius: 50%;
+  background: color-mix(in srgb, var(--pc) 22%, #fff);
+  box-shadow: 0 0 0 3px var(--pc), 0 1px 3px rgba(0,0,0,.15);
+}
+.setup__previewname { font-weight: 700; color: color-mix(in srgb, var(--pc) 78%, #1a2a22); }
 .setup__addrow input[type='text'] { flex: 1; min-width: 130px; border: 1px solid var(--line); border-radius: 8px; padding: 0.55rem; font-size: 1rem; }
 .setup__addrow button { background: var(--green); color: #fff; border: 0; border-radius: 8px; padding: 0.55rem 0.9rem; cursor: pointer; }
 .setup__adminchk { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.9rem; }
@@ -674,28 +690,42 @@
 /* Espacio para que el contenido no quede bajo el marco (barras de 10px). */
 .app { padding-left: 1rem; padding-right: 1rem; }
 .topbar { padding-top: 1rem; }
+/* Con el marco rico (banda de 20px + emblemas de 46px) hace falta más aire. */
+.app:has(.boardframe--rich) { padding-left: 26px; padding-right: 26px; }
+.app:has(.boardframe--rich) .topbar { padding-top: 52px; }
+.setup--framed { padding-left: 28px; padding-right: 28px; padding-top: 54px; }
 
-/* ─── Marco "rico" (solo modo TV/compartir pantalla): franjas de color + oro
-   y emblemas de esquina más grandes, como el tablero. En pantalla grande luce;
-   en el dispositivo personal se usa el sobrio de arriba. ─── */
+/* ─── Marco "rico" estilo tablero (modo TV/compartir y sala de creación).
+   Banda tipo tablero oscuro con doble filo dorado + emblemas de esquina y
+   pequeños dibujos (emojis). Sin arcoíris. ─── */
 .boardframe--rich .boardframe__bar {
-  --seg: 30px;
-  background: repeating-linear-gradient(var(--dir, 90deg),
-    #7b4a2b 0 var(--seg), #7ec8e3 var(--seg) calc(2*var(--seg)),
-    #d3247e calc(2*var(--seg)) calc(3*var(--seg)), #f28f1c calc(3*var(--seg)) calc(4*var(--seg)),
-    #e2262b calc(4*var(--seg)) calc(5*var(--seg)), #f4d21b calc(5*var(--seg)) calc(6*var(--seg)),
-    #22a45c calc(6*var(--seg)) calc(7*var(--seg)), #1f6fb2 calc(7*var(--seg)) calc(8*var(--seg)));
+  background: linear-gradient(var(--dir, 90deg), #0f3d4e, #0b2c39);
+  box-shadow: inset 0 0 0 1.5px rgba(201,162,39,.5);
 }
-.boardframe--rich .boardframe__bar--top { height: 14px; --dir: 90deg; border-bottom: 2.5px solid var(--frame-gold); }
-.boardframe--rich .boardframe__bar--bottom { height: 14px; --dir: 90deg; border-top: 2.5px solid var(--frame-gold); }
-.boardframe--rich .boardframe__bar--left { width: 14px; --dir: 180deg; border-right: 2.5px solid var(--frame-gold); }
-.boardframe--rich .boardframe__bar--right { width: 14px; --dir: 180deg; border-left: 2.5px solid var(--frame-gold); }
+.boardframe--rich .boardframe__bar--top { height: 20px; --dir: 180deg; border-bottom: 3px solid var(--frame-gold); }
+.boardframe--rich .boardframe__bar--bottom { height: 20px; --dir: 0deg; border-top: 3px solid var(--frame-gold); }
+.boardframe--rich .boardframe__bar--left { width: 20px; --dir: 90deg; border-right: 3px solid var(--frame-gold); }
+.boardframe--rich .boardframe__bar--right { width: 20px; --dir: 270deg; border-left: 3px solid var(--frame-gold); }
 .boardframe--rich .boardframe__corner {
-  width: 42px; height: 42px; font-size: 22px; border-radius: 12px; border-width: 3px;
+  width: 46px; height: 46px; font-size: 24px; border-radius: 13px; border-width: 3px;
   box-shadow: 0 3px 8px rgba(0,0,0,.4);
 }
 /* Colores de emblema por esquina, como en el tablero de referencia. */
-.boardframe--rich .boardframe__corner--tl { background: linear-gradient(135deg, #56c5d0, #2f9aa8); top: 2px; left: 2px; }
-.boardframe--rich .boardframe__corner--tr { background: linear-gradient(135deg, #f6a83b, #e07d17); top: 2px; right: 2px; }
-.boardframe--rich .boardframe__corner--bl { background: linear-gradient(135deg, #b48be0, #8a5ec9); bottom: 2px; left: 2px; }
-.boardframe--rich .boardframe__corner--br { background: linear-gradient(135deg, #77c05a, #4f9a35); bottom: 2px; right: 2px; }
+.boardframe--rich .boardframe__corner--tl { background: linear-gradient(135deg, #56c5d0, #2f9aa8); top: 3px; left: 3px; }
+.boardframe--rich .boardframe__corner--tr { background: linear-gradient(135deg, #f6a83b, #e07d17); top: 3px; right: 3px; }
+.boardframe--rich .boardframe__corner--bl { background: linear-gradient(135deg, #b48be0, #8a5ec9); bottom: 3px; left: 3px; }
+.boardframe--rich .boardframe__corner--br { background: linear-gradient(135deg, #77c05a, #4f9a35); bottom: 3px; right: 3px; }
+
+/* Pequeños "dibujos" repartidos por el marco (decorativos, no bloquean). */
+.boardframe__deco { position: absolute; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.45)); }
+.boardframe__deco--dice  { top: 22%; left: -2px; font-size: 30px; transform: rotate(-12deg); }
+.boardframe__deco--money { top: 40%; right: -1px; font-size: 26px; transform: rotate(10deg); }
+.boardframe__deco--city  { bottom: 8%; right: 3px; font-size: 34px; }
+.boardframe__deco--mono  { bottom: 12%; left: -1px; font-size: 32px; }
+.boardframe__deco--bank  { top: 55%; left: -1px; font-size: 24px; }
+.boardframe__deco--star1 { top: 8%; left: 32%; font-size: 16px; }
+.boardframe__deco--star2 { top: 6%; right: 30%; font-size: 14px; }
+@media (max-width: 560px) {
+  /* En móvil, decoraciones un poco más pequeñas para no invadir. */
+  .boardframe__deco--dice, .boardframe__deco--mono, .boardframe__deco--city { font-size: 24px; }
+}
