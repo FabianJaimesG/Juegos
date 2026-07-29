@@ -9,6 +9,7 @@ import {
   canCancelTrade,
   canRespondToTrade,
   createGame,
+  winnerOf,
   type GameSettings,
   type GameState,
   holdingsOf,
@@ -92,6 +93,8 @@ export default function App() {
   // Oculta la carta/ruleta en ESTE dispositivo sin resolverla (sigue pendiente
   // para todos). Evita que una carta que no puedes pagar bloquee la pantalla.
   const [hiddenCard, setHiddenCard] = useState<string | null>(null);
+  // El anuncio de victoria se puede cerrar para seguir mirando el tablero.
+  const [winnerSeen, setWinnerSeen] = useState<string | null>(null);
 
   const sym = state.currencySymbol;
   const money = (n: number) => `${sym}${n.toLocaleString('es')}`;
@@ -211,6 +214,8 @@ export default function App() {
   const turnPlayer = state.players[state.turnIndex];
   const myTurn = !!turnPlayer && canControl(turnPlayer.id);
 
+  const winner = winnerOf(state);
+
   // Responder una negociación NO va por `canControl` (ver engine).
   const canRespondTrade = canRespondToTrade(state, me?.id ?? null, amAdmin);
 
@@ -272,6 +277,15 @@ export default function App() {
 
       {state.settings.cardPacks.includes('parada-libre') && (
         <ParadaLibreBar state={state} act={act} money={money} me={me} canControl={canControl} />
+      )}
+
+      {winner && winnerSeen !== winner.id && (
+        <WinnerBanner
+          winner={winner}
+          money={money}
+          onClose={() => setWinnerSeen(winner.id)}
+          onEnd={amAdmin ? () => { setWinnerSeen(winner.id); act({ type: 'END_GAME' }); } : undefined}
+        />
       )}
 
       {state.wheel && hiddenCard !== 'wheel' && (
@@ -1257,6 +1271,35 @@ function ParadaLibreBar({ state, act, money, me, canControl }: {
           🤝 Renta → ficha
         </button>
       )}
+    </div>
+  );
+}
+
+/** Anuncio de victoria: queda un solo jugador sin bancarrota. */
+function WinnerBanner({ winner, money, onClose, onEnd }: {
+  winner: RuntimePlayer;
+  money: (n: number) => string;
+  onClose: () => void;
+  onEnd?: () => void;
+}) {
+  return (
+    <div className="overlay overlay--card">
+      <div className="winner">
+        <div className="winner__cup">🏆</div>
+        <h2 className="winner__name">{winner.icon} {winner.name}</h2>
+        <p className="winner__sub">¡Gana la partida!</p>
+        <p className="winner__worth">
+          Patrimonio final: <b>{money(playerNetWorth(winner))}</b>
+          <br />
+          <span className="hint">
+            {money(winner.cash)} en efectivo · {winner.holdings.length} propiedades
+          </span>
+        </p>
+        <div className="gcard__btns">
+          {onEnd && <button className="confirm" onClick={onEnd}>🏁 Terminar y volver a preparación</button>}
+          <button className="gcard__later" onClick={onClose}>Seguir viendo el tablero</button>
+        </div>
+      </div>
     </div>
   );
 }

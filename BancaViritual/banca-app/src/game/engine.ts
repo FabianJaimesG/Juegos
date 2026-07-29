@@ -348,6 +348,16 @@ export function canCancelTrade(s: GameState, meId: string | null, isAdmin: boole
   return isAdmin && !proposer?.claimedBy;
 }
 
+/**
+ * Ganador de la partida: el único que sigue en pie cuando todos los demás
+ * están en bancarrota. `null` mientras queden dos o más jugando.
+ */
+export function winnerOf(s: GameState): RuntimePlayer | null {
+  if (!s.started || s.players.length < 2) return null;
+  const alive = s.players.filter((p) => !p.bankrupt);
+  return alive.length === 1 ? alive[0] : null;
+}
+
 /** Efectivo mínimo que un jugador debe conservar tras un pago (no puede quedar en 0). */
 export const MIN_CASH = 1;
 
@@ -826,7 +836,7 @@ export function reducer(s: GameState, a: Action): GameState {
       }
       // Y una negociación suya a medias se cancela: bloquearía todas las demás.
       const killTrade = !!s.pendingTrade && (s.pendingTrade.aId === p.id || s.pendingTrade.bId === p.id);
-      return {
+      const quebrado: GameState = {
         ...s,
         players: mapPlayer(s, a.playerId, (x) => ({ ...x, bankrupt: true, cash: 0, holdings: [], tokens: [], spins: 0, freeHouses: 0, freeProps: 0, forceSwaps: 0 })),
         decks,
@@ -836,6 +846,12 @@ export function reducer(s: GameState, a: Action): GameState {
         limoPlayerId: s.limoPlayerId === p.id ? null : s.limoPlayerId,
         log: log(s, `${p.name} se declaró en bancarrota (sus propiedades vuelven al banco)`),
       };
+      // Si con esta bancarrota queda uno solo en pie, se proclama ganador.
+      const last = quebrado.players.filter((x) => !x.bankrupt);
+      if (quebrado.players.length >= 2 && last.length === 1) {
+        return { ...quebrado, log: log(quebrado, `🏆 ¡${last[0].name} gana la partida!`) };
+      }
+      return quebrado;
     }
 
     case 'CLAIM_PLAYER': {

@@ -1,6 +1,6 @@
 // Verificación de las cartas (Arca Comunal / Fortuna). Ejecutar: npx tsx scripts/test-cards.ts
 import { activeDecks, CARDS, cardsFor, copiesOf, deckIds, getCard, isAutomatic, PACKS, packSize, WHEEL } from '../src/domain/cards';
-import { canCancelTrade, canRespondToTrade, createGame, reducer, type Action, type GameState } from '../src/game/engine';
+import { canCancelTrade, canRespondToTrade, createGame, reducer, winnerOf, type Action, type GameState } from '../src/game/engine';
 import { GAME_CONFIG } from '../src/domain/config';
 
 let pass = 0;
@@ -590,6 +590,30 @@ let gTr2 = run(g,
 );
 gTr2 = reducer(gTr2, { type: 'DECLARE_BANKRUPTCY', playerId: caro });
 ok(gTr2.pendingTrade !== null, 'una negociación entre otros no se cancela');
+
+console.log('34) Ganador: el último en pie');
+let gW2 = run(createGame('WIN'),
+  { type: 'ADD_PLAYER', name: 'Ana' },
+  { type: 'ADD_PLAYER', name: 'Beto' },
+  { type: 'ADD_PLAYER', name: 'Caro' },
+  { type: 'START_GAME' },
+);
+const [wa, wb, wc] = gW2.players.map((p) => p.id);
+ok(winnerOf(gW2) === null, 'con tres jugando no hay ganador');
+gW2 = reducer(gW2, { type: 'DECLARE_BANKRUPTCY', playerId: wb });
+ok(winnerOf(gW2) === null, 'con dos en pie tampoco');
+gW2 = reducer(gW2, { type: 'DECLARE_BANKRUPTCY', playerId: wc });
+ok(winnerOf(gW2)?.id === wa, 'al quedar uno solo, ese es el ganador');
+ok(gW2.log[0].text.includes('gana la partida'), 'se anuncia en el historial (y la voz lo lee)');
+ok(gW2.log[0].text.includes('Ana'), 'con su nombre');
+// No se proclama ganador antes de empezar ni en solitario.
+const gPrep = run(createGame('W2'), { type: 'ADD_PLAYER', name: 'Ana' }, { type: 'ADD_PLAYER', name: 'Beto' });
+ok(winnerOf(gPrep) === null, 'en la preparación no hay ganador');
+const gUno = run(createGame('W3'), { type: 'ADD_PLAYER', name: 'Ana' }, { type: 'START_GAME' });
+ok(winnerOf(gUno) === null, 'con un solo jugador en la partida, tampoco');
+// Volver a empezar borra la victoria.
+const gOtra = reducer(reducer(gW2, { type: 'END_GAME' }), { type: 'START_GAME' });
+ok(winnerOf(gOtra) === null, 'al reiniciar ya no hay ganador (vuelven todos)');
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} ok, ${fail} fallidas`);
 process.exit(fail === 0 ? 0 : 1);
