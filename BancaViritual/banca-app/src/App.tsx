@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { PropertyCard } from './components/PropertyCard';
 import { WealthChart } from './components/WealthChart';
@@ -441,7 +441,7 @@ function PlayerTile({
             <button className="b-in" onClick={() => onOpen('collect')}>Cobrar</button>
             <button className="b-out" onClick={() => onOpen('pay')}>Pagar</button>
             <button className="b-prop" onClick={() => onOpen('props')}>Propiedades</button>
-            <button className="b-salida" onClick={onSalida}>🟢 Salida</button>
+            <button className="b-salida" onClick={onSalida} disabled={p.jail > 0} title={p.jail > 0 ? 'En la cárcel no pasas por SALIDA' : ''}>🟢 Salida</button>
             {p.jail === 0 && <button className="b-jail" onClick={onJail} title="Ve a la cárcel">🚔</button>}
             {isCurrent && canTrade && <button className="b-trade" onClick={() => onOpen('trade')}>Negociar</button>}
           </>
@@ -526,7 +526,7 @@ function SheetContent({
   if (sheet.kind === 'props') {
     // Pagar renta: solo el jugador en turno (o su admin) puede pagar renta a OTRO dueño.
     const turnPlayer = state.players[state.turnIndex];
-    const canPayRent = !!turnPlayer && !turnPlayer.bankrupt && canControl(turnPlayer.id) && turnPlayer.id !== me.id;
+    const canPayRent = !!turnPlayer && !turnPlayer.bankrupt && turnPlayer.jail === 0 && canControl(turnPlayer.id) && turnPlayer.id !== me.id;
     const diceTotal = state.dice ? state.dice.a + state.dice.b : null;
     return (
       <PropsPanel
@@ -827,6 +827,7 @@ function Market({
     <div className="form">
       <h2>🛒 Comprar propiedad — {me.name}</h2>
       <p className="hint">Efectivo: {money(me.cash)} · Casas banco: {left.houses} · Hoteles: {left.hotels}</p>
+      {me.jail > 0 && <p className="gcard__warn">🚔 Estás en la cárcel: no te mueves, así que no puedes comprar propiedades hasta salir.</p>}
       {freebie && (
         <p className="hint">
           🎁 Puedes quedarte una propiedad <b>gratis</b>
@@ -839,7 +840,7 @@ function Market({
             <PropertyCard property={prop} compact />
             <button
               className="buy"
-              disabled={me.cash - prop.price < 1}
+              disabled={me.cash - prop.price < 1 || me.jail > 0}
               onClick={() => { act({ type: 'BUY_PROPERTY', playerId: me.id, propertyId: prop.id }); }}
             >
               Comprar {money(prop.price)}
@@ -848,6 +849,7 @@ function Market({
             {freebie && (
               <button
                 className="market__free"
+                disabled={me.jail > 0}
                 title="Usar tu carta de propiedad gratis: te la quedas sin pagar"
                 onClick={() => { act({ type: 'BUY_PROPERTY', playerId: me.id, propertyId: prop.id, free: true }); close(); }}
               >
@@ -1248,9 +1250,9 @@ function ParadaLibreBar({ state, act, money, me, canControl, revealWheel }: {
           </button>
           <button
             className="parada__take"
-            disabled={state.pot <= 0}
+            disabled={state.pot <= 0 || turn.jail > 0}
             onClick={() => act({ type: 'POT_TAKE', playerId: turn.id })}
-            title="El jugador en turno se lleva el Gran Premio (todo el bote)"
+            title={turn.jail > 0 ? 'En la cárcel no puedes caer en la Parada Libre' : 'El jugador en turno se lleva el Gran Premio (todo el bote)'}
           >
             🎰 Gran Premio
           </button>
@@ -1263,7 +1265,8 @@ function ParadaLibreBar({ state, act, money, me, canControl, revealWheel }: {
       {me && (
         <button
           className="parada__land"
-          title="Caíste en la casilla: te llevas el Gran Premio, la limusina y una tarjeta de Bonificación"
+          disabled={me.jail > 0}
+          title={me.jail > 0 ? 'En la cárcel no puedes caer en la Parada Libre' : 'Caíste en la casilla: te llevas el Gran Premio, la limusina y una tarjeta de Bonificación'}
           onClick={() => {
             if (confirm('¿Caíste en la Parada Libre?\n\nTe llevas el bote, la limusina 🚘 y una tarjeta de Bonificación ⭐.')) {
               act({ type: 'LAND_FREE_PARKING', playerId: me.id });
@@ -1311,6 +1314,7 @@ function RentToSpin({ state, act, turnName }: {
 }) {
   const [open, setOpen] = useState(false);
   const max = state.settings.maxSpins;
+  const turnInJail = (state.players[state.turnIndex]?.jail ?? 0) > 0;
   const eligible = state.players.filter(
     (p) =>
       !p.bankrupt &&
@@ -1322,11 +1326,13 @@ function RentToSpin({ state, act, turnName }: {
     <span className="rent2spin">
       <button
         className="parada__claim"
-        disabled={eligible.length === 0}
+        disabled={eligible.length === 0 || turnInJail}
         title={
-          eligible.length === 0
-            ? 'Nadie puede recibir la ficha: sin propiedades sin hipotecar o ya llegaron al tope'
-            : `${turnName} cayó en una propiedad y no cobra la renta: entrega una ficha de giro a su dueño${max > 0 ? ` (tope: ${max})` : ''}`
+          turnInJail
+            ? 'En la cárcel no caes en propiedades: no hay renta que perdonar'
+            : eligible.length === 0
+              ? 'Nadie puede recibir la ficha: sin propiedades sin hipotecar o ya llegaron al tope'
+              : `${turnName} cayó en una propiedad y no cobra la renta: entrega una ficha de giro a su dueño${max > 0 ? ` (tope: ${max})` : ''}`
         }
         onClick={() => setOpen((v) => !v)}
       >
@@ -1971,6 +1977,97 @@ function CardPacksPanel({ packs, setPacks, sym }: {
   );
 }
 
+/** Una sala tal como se lista desde la base de datos. */
+type RoomRow = { code: string; players: number; started: boolean; updatedAt: string | null };
+
+/**
+ * Explorador de salas: lista todas las salas creadas en la base de datos, con
+ * cuántos jugadores tienen y cuándo se actualizaron, y permite unirse o
+ * eliminarlas. Solo aparece cuando hay Supabase configurado.
+ */
+function RoomsBrowser({ currentCode, onJoin }: {
+  currentCode: string;
+  onJoin: (code: string) => void;
+}) {
+  const [rooms, setRooms] = useState<RoomRow[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!supabase) return;
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('Room')
+      .select('code, state, updatedAt')
+      .order('updatedAt', { ascending: false });
+    setLoading(false);
+    if (error) { alert('No se pudieron cargar las salas: ' + error.message); return; }
+    setRooms(
+      (data ?? []).map((r) => {
+        const st = r.state as GameState | null;
+        return {
+          code: r.code as string,
+          players: st?.players?.length ?? 0,
+          started: !!st?.started,
+          updatedAt: (r.updatedAt as string | null) ?? null,
+        };
+      }),
+    );
+  }, []);
+
+  // Cargar al abrir el panel por primera vez.
+  useEffect(() => {
+    if (open && rooms === null) void load();
+  }, [open, rooms, load]);
+
+  const remove = async (code: string) => {
+    if (!supabase) return;
+    if (!confirm(`¿Eliminar la sala ${code}? No se puede deshacer.`)) return;
+    const { error } = await supabase.from('Room').delete().eq('code', code);
+    if (error) { alert('No se pudo eliminar: ' + error.message); return; }
+    setRooms((rs) => (rs ?? []).filter((r) => r.code !== code));
+  };
+
+  const when = (iso: string | null): string => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+  };
+
+  return (
+    <div className="rooms">
+      <button className="rooms__toggle" onClick={() => setOpen((v) => !v)}>
+        🗂️ Salas en la base de datos {open ? '▴' : '▾'}
+      </button>
+      {open && (
+        <div className="rooms__body">
+          <div className="rooms__bar">
+            <button onClick={() => void load()} disabled={loading}>
+              {loading ? 'Cargando…' : '🔄 Actualizar'}
+            </button>
+            {rooms && <span className="hint">{rooms.length} sala{rooms.length === 1 ? '' : 's'}</span>}
+          </div>
+          {rooms && rooms.length === 0 && <p className="hint">No hay salas creadas.</p>}
+          <ul className="rooms__list">
+            {(rooms ?? []).map((r) => (
+              <li key={r.code} className={`rooms__item ${r.code === currentCode ? 'rooms__item--current' : ''}`}>
+                <span className="rooms__code">
+                  <b>{r.code}</b>{r.code === currentCode && ' (actual)'}
+                  <span className="hint"> · 👤 {r.players} · {r.started ? '▶ en juego' : '⏸ preparación'} · {when(r.updatedAt)}</span>
+                </span>
+                <span className="rooms__btns">
+                  <button onClick={() => onJoin(r.code)} disabled={r.code === currentCode}>Unirse</button>
+                  <button className="rooms__del" onClick={() => void remove(r.code)} title="Eliminar esta sala">🗑️</button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
   state: GameState;
   act: ReturnType<typeof useGame>['act'];
@@ -1993,6 +2090,8 @@ function SetupScreen({ state, act, share, onJoin, onNewRoom }: {
         <button onClick={() => { const c = prompt('Código de sala a la que unirse:'); if (c) onJoin(c); }}>Unirse a otra sala</button>
         <button onClick={onNewRoom} title="Empezar de cero en una sala con código nuevo">➕ Sala nueva</button>
       </div>
+
+      {hasSupabase && <RoomsBrowser currentCode={state.code} onJoin={onJoin} />}
 
       <h2>Jugadores ({state.players.length}) — orden de juego</h2>
       <ol className="setup__players">

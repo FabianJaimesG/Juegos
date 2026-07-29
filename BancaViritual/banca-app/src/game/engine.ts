@@ -719,7 +719,7 @@ export function reducer(s: GameState, a: Action): GameState {
 
     case 'SALIDA': {
       const p = s.players.find((x) => x.id === a.playerId);
-      if (!p) return s;
+      if (!p || p.jail > 0) return s; // en la cárcel no te mueves: no pasas por SALIDA
       return {
         ...s,
         players: mapPlayer(s, a.playerId, (x) => ({ ...x, cash: x.cash + GAME_CONFIG.goSalary })),
@@ -730,7 +730,7 @@ export function reducer(s: GameState, a: Action): GameState {
     case 'BUY_PROPERTY': {
       const prop = getProperty(a.propertyId);
       const p = s.players.find((x) => x.id === a.playerId);
-      if (!prop || !p) return s;
+      if (!prop || !p || p.jail > 0) return s; // en la cárcel no caes en propiedades: no compras
       // No se puede comprar si ya la posee alguien.
       const taken = s.players.some((x) => x.holdings.some((h) => h.propertyId === a.propertyId));
       if (taken) return s;
@@ -952,6 +952,7 @@ export function reducer(s: GameState, a: Action): GameState {
       const owner = s.players.find((x) => x.id === a.toId);
       const h = owner?.holdings.find((x) => x.propertyId === a.propertyId);
       if (!prop || !from || !owner || !h || from.id === owner.id || h.mortgaged) return s;
+      if (from.jail > 0) return s; // en la cárcel no caes en propiedades: no pagas renta
       // Los servicios requieren una tirada (renta = dados × multiplicador).
       if (prop.kind === 'utility' && !s.dice) return s;
       const diceTotal = s.dice ? s.dice.a + s.dice.b : 0;
@@ -1094,7 +1095,7 @@ export function reducer(s: GameState, a: Action): GameState {
 
     case 'POT_TAKE': {
       const p = s.players.find((x) => x.id === a.playerId);
-      if (!p || s.pot <= 0) return s;
+      if (!p || s.pot <= 0 || p.jail > 0) return s; // el Gran Premio es al caer en la casilla: no en la cárcel
       const share = a.share ?? 1;
       const amount = Math.round(s.pot * share);
       if (amount <= 0) return s;
@@ -1143,6 +1144,8 @@ export function reducer(s: GameState, a: Action): GameState {
       // El dueño de la propiedad donde cayó el jugador en turno recibe la ficha:
       // debe estar jugando y tener alguna propiedad sin hipotecar.
       if (!owner || owner.bankrupt || !owner.holdings.some((h) => !h.mortgaged)) return s;
+      // El jugador en turno debió caer en la propiedad: en la cárcel no se mueve.
+      if (s.players[s.turnIndex]?.jail > 0) return s;
       const max = s.settings.maxSpins;
       // Tope anti-abuso: sin él, dos jugadores pactan perdonarse la renta para
       // fabricar fichas gratis (el banco es una fuente infinita).
@@ -1204,7 +1207,7 @@ export function reducer(s: GameState, a: Action): GameState {
 
     case 'LAND_FREE_PARKING': {
       const p = s.players.find((x) => x.id === a.playerId);
-      if (!p) return s;
+      if (!p || p.jail > 0) return s; // no puedes caer en la casilla estando en la cárcel
       // La casilla entrega: el Gran Premio, la limusina y una tarjeta de Bonificación.
       const amount = s.pot;
       return dealToHand({

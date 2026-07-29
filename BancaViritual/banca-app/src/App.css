@@ -67,6 +67,27 @@
 .setup h2 { font-size: 1.05rem; margin-top: 1.2rem; }
 .setup__top, .setup__add { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .setup__top button { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem 0.8rem; cursor: pointer; }
+/* ─── Explorador de salas (ingreso) ─── */
+.rooms { margin-top: 0.8rem; }
+.rooms__toggle {
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  padding: 0.5rem 0.8rem; cursor: pointer; font-weight: 600; width: 100%; text-align: left;
+}
+.rooms__body { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 10px 10px; padding: 0.6rem; }
+.rooms__bar { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+.rooms__bar button { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 0.35rem 0.7rem; cursor: pointer; }
+.rooms__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.rooms__item {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0.5rem 0.7rem;
+}
+.rooms__item--current { border-color: #16a34a; }
+.rooms__code { font-size: 0.9rem; }
+.rooms__btns { display: flex; gap: 0.4rem; }
+.rooms__btns button { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 0.35rem 0.7rem; cursor: pointer; }
+.rooms__btns button:disabled { opacity: 0.45; cursor: not-allowed; }
+.rooms__del { color: #dc2626; }
+
 .setup__players { list-style: none; padding: 0; margin: 0.5rem 0; }
 .setup__players li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0.5rem 0.7rem; margin-bottom: 0.4rem; }
 .setup__pname { font-weight: 600; }

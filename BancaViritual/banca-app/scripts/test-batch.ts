@@ -186,5 +186,35 @@ gj = { ...gj, players: gj.players.map((p) => (p.id === anaJ ? { ...p, jail: 1 } 
 const gjDraw = reducer(gj, { type: 'DRAW_CARD', deck: 'fortuna', playerId: anaJ });
 ok(gjDraw.drawnCard === null, 'en la cárcel, DRAW_CARD no saca carta');
 
+console.log('11) En la cárcel se reducen las acciones de movimiento');
+let gc = createGame('CARC');
+gc = { ...gc, settings: { ...gc.settings, cardPacks: ['base', 'parada-libre'] } };
+gc = run(gc,
+  { type: 'ADD_PLAYER', name: 'Ana', admin: true },
+  { type: 'ADD_PLAYER', name: 'Beto' },
+  { type: 'START_GAME' },
+);
+const [anaC, betoC] = gc.players.map((p) => p.id);
+// Ana en la cárcel con efectivo suficiente.
+gc = setCash(gc, anaC, 3000);
+gc = { ...gc, players: gc.players.map((p) => (p.id === anaC ? { ...p, jail: 1 } : p)), pot: 500 };
+const cashAna = () => gc.players.find((p) => p.id === anaC)!.cash;
+// SALIDA bloqueada
+ok(reducer(gc, { type: 'SALIDA', playerId: anaC }).players.find((p) => p.id === anaC)!.cash === cashAna(), 'SALIDA bloqueada en la cárcel');
+// BUY_PROPERTY bloqueada
+ok(reducer(gc, { type: 'BUY_PROPERTY', playerId: anaC, propertyId: 'oriental' }).players.find((p) => p.id === anaC)!.holdings.length === 0, 'comprar propiedad bloqueado en la cárcel');
+// POT_TAKE bloqueado
+ok(reducer(gc, { type: 'POT_TAKE', playerId: anaC }).pot === 500, 'Gran Premio bloqueado en la cárcel');
+// LAND_FREE_PARKING bloqueado
+ok(reducer(gc, { type: 'LAND_FREE_PARKING', playerId: anaC }).pot === 500, 'caer en Parada Libre bloqueado en la cárcel');
+// PAY_RENT bloqueado si el pagador está en la cárcel (Beto dueño de 'oriental')
+let gcr = setCash(gc, betoC, 3000);
+gcr = reducer(gcr, { type: 'BUY_PROPERTY', playerId: betoC, propertyId: 'oriental' });
+const anaCashBefore = gcr.players.find((p) => p.id === anaC)!.cash;
+ok(reducer(gcr, { type: 'PAY_RENT', fromId: anaC, toId: betoC, propertyId: 'oriental' }).players.find((p) => p.id === anaC)!.cash === anaCashBefore, 'pagar renta bloqueado si el pagador está en la cárcel');
+// RENT_TO_SPIN bloqueado si el jugador en turno (Ana, turnIndex 0) está en la cárcel
+gcr = { ...gcr, players: gcr.players.map((p) => (p.id === betoC ? { ...p, spins: 0 } : p)) };
+ok(reducer(gcr, { type: 'RENT_TO_SPIN', ownerId: betoC }).players.find((p) => p.id === betoC)!.spins === 0, 'renta→ficha bloqueado si el jugador en turno está en la cárcel');
+
 console.log(`\n${pass} ok, ${fail} fallos`);
 process.exit(fail ? 1 : 0);
