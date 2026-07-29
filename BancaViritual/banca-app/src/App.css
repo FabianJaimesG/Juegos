@@ -37,16 +37,31 @@
 .empty { color: var(--muted); }
 
 .ptile {
-  background: var(--card);
+  --pc: #888;
+  /* Lavado suave del color del jugador que se desvanece hacia la tarjeta (no inunda). */
+  background: linear-gradient(180deg, color-mix(in srgb, var(--pc) 13%, var(--card)), var(--card) 78px);
   border: 1px solid var(--line);
-  border-top: 4px solid #888;
+  border-top: 4px solid var(--pc);
   border-radius: 12px;
   padding: 0.75rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
-.ptile--current { border: 1px solid var(--green); border-top-width: 4px; }
-.ptile__head { display: flex; align-items: center; justify-content: space-between; }
+/* Jugador en turno: anillo del propio color en vez del verde genérico. */
+.ptile--current {
+  border-color: color-mix(in srgb, var(--pc) 45%, var(--line));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pc) 60%, transparent), 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.ptile__head {
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 2px solid color-mix(in srgb, var(--pc) 32%, transparent);
+  padding-bottom: 0.35rem;
+}
 .ptile__name { font-weight: 700; }
+.ptile__name::before {
+  content: ''; display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 50%;
+  background: var(--pc); margin-right: 0.4rem; vertical-align: middle;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12) inset;
+}
 .ptile__edit { background: transparent; border: 0; cursor: pointer; font-size: 0.95rem; opacity: 0.6; }
 .ptile__edit:hover { opacity: 1; }
 .ptile__cash { font-size: 1.5rem; font-weight: 700; color: var(--green-d); margin: 0.3rem 0; }
@@ -188,11 +203,17 @@
 
 /* Barra de turno + dados */
 .turnbar {
+  --pc: var(--green);
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem;
-  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  /* Tinte suave del color del jugador en turno + acento a la izquierda. */
+  background: linear-gradient(180deg, color-mix(in srgb, var(--pc) 15%, var(--card)), var(--card));
+  border: 1px solid color-mix(in srgb, var(--pc) 32%, var(--line));
+  border-left: 5px solid var(--pc);
+  border-radius: 10px;
   padding: 0.5rem 0.75rem; margin: 0.75rem 0;
 }
 .turnbar__who { font-size: 0.95rem; }
+.turnbar__who b { color: color-mix(in srgb, var(--pc) 80%, #1a2a22); }
 .turnbar__dice { display: inline-flex; align-items: center; gap: 0.3rem; background: #f3f6f0; border: 1px solid var(--line); border-radius: 8px; padding: 0.2rem 0.5rem; font-size: 0.9rem; }
 .turnbar__btns { margin-left: auto; display: flex; gap: 0.4rem; }
 .turnbar__btns button { background: var(--green); color: #fff; border: 0; border-radius: 8px; padding: 0.45rem 0.7rem; cursor: pointer; }

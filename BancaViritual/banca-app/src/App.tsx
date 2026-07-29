@@ -248,7 +248,7 @@ export default function App() {
       </header>
 
       {turnPlayer && (
-        <div className="turnbar">
+        <div className="turnbar" style={{ ['--pc' as string]: PLAYER_COLOR(turnPlayer.colorIndex) }}>
           <span className="turnbar__who">Turno: <b>{turnPlayer.icon} {turnPlayer.name}</b>{myTurn && ' (tú)'}</span>
           {state.settings.dice && <DiceView dice={state.dice} onRoll={() => act({ type: 'ROLL_DICE' })} canRoll={myTurn} />}
           <span className="turnbar__decks">
@@ -405,7 +405,7 @@ function PlayerTile({
   const b = playerBuildings(p);
   const color = PLAYER_COLOR(p.colorIndex);
   return (
-    <article className={`ptile ${isCurrent ? 'ptile--current' : ''} ${canControl ? '' : 'ptile--other'} ${p.bankrupt ? 'ptile--bankrupt' : ''}`} style={{ borderTopColor: color }}>
+    <article className={`ptile ${isCurrent ? 'ptile--current' : ''} ${canControl ? '' : 'ptile--other'} ${p.bankrupt ? 'ptile--bankrupt' : ''}`} style={{ ['--pc' as string]: color }}>
       <div className="ptile__head">
         <span className="ptile__name">{p.icon} {p.name} {isCurrent && '⭐'} {p.admin && '🛡️'} {hasLimo && <span className="limo" title="Limusina dorada">🚗</span>} {p.jail > 0 && '🚔'} {p.bankrupt && '💀'}</span>
         {canControl && <button className="ptile__edit" title="Editar personaje" onClick={() => onOpen('edit')}>✏️</button>}
