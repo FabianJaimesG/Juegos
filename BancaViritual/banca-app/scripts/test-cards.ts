@@ -1,6 +1,6 @@
 // Verificación de las cartas (Arca Comunal / Fortuna). Ejecutar: npx tsx scripts/test-cards.ts
 import { activeDecks, CARDS, cardsFor, copiesOf, deckIds, getCard, isAutomatic, PACKS, packSize, WHEEL } from '../src/domain/cards';
-import { createGame, reducer, type Action, type GameState } from '../src/game/engine';
+import { canCancelTrade, canRespondToTrade, createGame, reducer, type Action, type GameState } from '../src/game/engine';
 import { GAME_CONFIG } from '../src/domain/config';
 
 let pass = 0;
@@ -524,6 +524,42 @@ ok(/^🎲 \d+ o \d+ o \d+$/.test(elige), `elegir: x o y o z (${elige})`);
 const especial = rollWith(5);
 ok(especial.includes('avanza a la siguiente propiedad') && /🎲 \d+,/.test(especial),
   `las demás: suma + el efecto (${especial})`);
+
+console.log('32) Quién puede responder una negociación');
+let gN = run(createGame('NEG'),
+  { type: 'ADD_PLAYER', name: 'Ana', admin: true },
+  { type: 'ADD_PLAYER', name: 'Beto' },
+  { type: 'ADD_PLAYER', name: 'Caro' },
+  { type: 'START_GAME' },
+);
+const [ja, jb, jc] = gN.players.map((p) => p.id);
+// Todos con su propio dispositivo.
+gN = run(gN,
+  { type: 'CLAIM_PLAYER', playerId: ja, deviceId: 'd-ana' },
+  { type: 'CLAIM_PLAYER', playerId: jb, deviceId: 'd-beto' },
+  { type: 'CLAIM_PLAYER', playerId: jc, deviceId: 'd-caro' },
+  { type: 'BUY_PROPERTY', playerId: ja, propertyId: 'boardwalk' },
+);
+// Ana (admin) le propone a Beto.
+gN = reducer(gN, { type: 'PROPOSE_TRADE', trade: { aId: ja, bId: jb, aCash: 0, bCash: 100, aProps: ['boardwalk'], bProps: [] } });
+ok(canRespondToTrade(gN, jb, false), 'el destinatario puede responder');
+ok(!canRespondToTrade(gN, ja, true), 'el proponente NO puede, aunque sea admin');
+ok(!canRespondToTrade(gN, jc, false), 'un tercero no puede');
+ok(!canRespondToTrade(gN, null, true), 'el modo TV no puede');
+// Un admin que no es parte tampoco responde por el destinatario si este tiene dispositivo.
+const gAdmin3 = { ...gN, players: gN.players.map((p) => (p.id === jc ? { ...p, admin: true } : p)) };
+ok(!canRespondToTrade(gAdmin3, jc, true), 'un admin ajeno no responde por el destinatario');
+// Partida en un solo dispositivo: el destinatario no ha reclamado ninguno.
+const gSolo2 = { ...gN, players: gN.players.map((p) => (p.id === jb ? { ...p, claimedBy: undefined } : p)) };
+ok(canRespondToTrade(gSolo2, jc, true), 'si el destinatario no tiene dispositivo, un admin responde por él');
+ok(!canRespondToTrade(gSolo2, ja, true), 'pero el proponente sigue sin poder');
+// Retirar la oferta.
+ok(canCancelTrade(gN, ja, false), 'el proponente puede retirar su oferta');
+ok(!canCancelTrade(gN, jb, false), 'el destinatario no la retira: la rechaza');
+ok(!canCancelTrade(gN, jc, false), 'un tercero tampoco');
+// Y sin propuesta, nadie puede nada.
+const gLimpio = reducer(gN, { type: 'REJECT_TRADE' });
+ok(!canRespondToTrade(gLimpio, jb, false) && !canCancelTrade(gLimpio, ja, false), 'sin propuesta no hay nada que responder');
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} ok, ${fail} fallidas`);
 process.exit(fail === 0 ? 0 : 1);

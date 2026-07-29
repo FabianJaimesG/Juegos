@@ -6,6 +6,8 @@ import { BOARD, getProperty, GROUPS } from './domain/board';
 import { activeDecks, CARDS, cardText, DECKS, getCard, getWheelFace, isAutomatic, PACKS, packSize, WHEEL, wheelShort, wheelText, type DeckId } from './domain/cards';
 import {
   bankBuildingsLeft,
+  canCancelTrade,
+  canRespondToTrade,
   createGame,
   type GameSettings,
   type GameState,
@@ -209,6 +211,9 @@ export default function App() {
   const turnPlayer = state.players[state.turnIndex];
   const myTurn = !!turnPlayer && canControl(turnPlayer.id);
 
+  // Responder una negociación NO va por `canControl` (ver engine).
+  const canRespondTrade = canRespondToTrade(state, me?.id ?? null, amAdmin);
+
   return (
     <div className="app">
       <header className="topbar">
@@ -301,7 +306,8 @@ export default function App() {
           players={state.players}
           act={act}
           money={money}
-          canRespond={canControl(state.pendingTrade.bId)}
+          canRespond={canRespondTrade}
+          canCancel={canCancelTrade(state, me?.id ?? null, amAdmin)}
         />
       )}
 
@@ -1498,12 +1504,13 @@ function CardModal({ drawn, state, act, money, canAct, onHide }: {
   );
 }
 
-function PendingTradeBanner({ trade, players, act, money, canRespond }: {
+function PendingTradeBanner({ trade, players, act, money, canRespond, canCancel }: {
   trade: PendingTrade;
   players: RuntimePlayer[];
   act: ReturnType<typeof useGame>['act'];
   money: (n: number) => string;
   canRespond: boolean;
+  canCancel: boolean;
 }) {
   const A = players.find((p) => p.id === trade.aId);
   const B = players.find((p) => p.id === trade.bId);
@@ -1524,14 +1531,32 @@ function PendingTradeBanner({ trade, players, act, money, canRespond }: {
         <b>{A?.icon} {A?.name}</b> ofrece: {side(trade.aCash, trade.aProps, trade.aCards, trade.aSpins)}<br />
         <b>{B?.icon} {B?.name}</b> ofrece: {side(trade.bCash, trade.bProps, trade.bCards, trade.bSpins)}
       </div>
-      {canRespond ? (
-        <div className="tradebanner__btns">
-          <button className="t-accept" onClick={() => act({ type: 'ACCEPT_TRADE' })}>✅ Aceptar</button>
-          <button className="t-reject" onClick={() => act({ type: 'REJECT_TRADE' })}>❌ Rechazar</button>
-        </div>
-      ) : (
-        <p className="hint">Esperando la respuesta de <b>{B?.name}</b>…</p>
-      )}
+      <div className="tradebanner__btns">
+        {/* Solo responde a quien va dirigida. Al resto se le muestran los
+            botones desactivados para que se entienda por qué no puede. */}
+        <button
+          className="t-accept"
+          disabled={!canRespond}
+          title={canRespond ? '' : `Solo ${B?.name} puede responder`}
+          onClick={() => act({ type: 'ACCEPT_TRADE' })}
+        >
+          ✅ Aceptar
+        </button>
+        <button
+          className="t-reject"
+          disabled={!canRespond}
+          title={canRespond ? '' : `Solo ${B?.name} puede responder`}
+          onClick={() => act({ type: 'REJECT_TRADE' })}
+        >
+          ❌ Rechazar
+        </button>
+        {/* El proponente puede retirarla: si no, una oferta a alguien ausente
+            bloquearía cualquier otra negociación. */}
+        {canCancel && !canRespond && (
+          <button className="t-cancel" onClick={() => act({ type: 'REJECT_TRADE' })}>↩️ Retirar oferta</button>
+        )}
+      </div>
+      {!canRespond && <p className="hint">Esperando la respuesta de <b>{B?.name}</b>…</p>}
     </div>
   );
 }

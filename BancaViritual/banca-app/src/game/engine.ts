@@ -322,6 +322,32 @@ export const playerRailUtil = (p: RuntimePlayer) => countByKind(holdingsOf(p));
 export const playerActiveRailUtil = (p: RuntimePlayer) => activeCountByKind(holdingsOf(p));
 export const bankBuildingsLeft = (s: GameState) => availableBuildings(s.players.map(holdingsOf));
 
+/**
+ * ¿Puede este dispositivo aceptar/rechazar la negociación pendiente?
+ *
+ * No basta con `canControl`: un administrador NO debe poder responder por otro,
+ * y nadie puede aceptar su propia oferta. La excepción es la partida en un solo
+ * dispositivo — si el destinatario no ha reclamado ninguno, el admin responde
+ * por él; de lo contrario la propuesta quedaría atascada para siempre.
+ */
+export function canRespondToTrade(s: GameState, meId: string | null, isAdmin: boolean): boolean {
+  const t = s.pendingTrade;
+  if (!t || !meId) return false;
+  if (meId === t.aId) return false; // el proponente, jamás
+  if (meId === t.bId) return true; // el destinatario, siempre
+  const target = s.players.find((p) => p.id === t.bId);
+  return isAdmin && !target?.claimedBy;
+}
+
+/** ¿Puede retirar la oferta? Solo quien la hizo (o el admin si ese jugador no tiene dispositivo). */
+export function canCancelTrade(s: GameState, meId: string | null, isAdmin: boolean): boolean {
+  const t = s.pendingTrade;
+  if (!t || !meId) return false;
+  if (meId === t.aId) return true;
+  const proposer = s.players.find((p) => p.id === t.aId);
+  return isAdmin && !proposer?.claimedBy;
+}
+
 /** Efectivo mínimo que un jugador debe conservar tras un pago (no puede quedar en 0). */
 export const MIN_CASH = 1;
 
