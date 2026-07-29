@@ -198,7 +198,6 @@ export type Action =
   | { type: 'REJECT_TRADE' }
   | { type: 'ROLL_DICE' }
   | { type: 'DRAW_CARD'; deck: DeckId; playerId: string }
-  | { type: 'TAKE_BONUS'; playerId: string } // Parada Libre: caes en Fortuna/Arca y tomas una carta ⭐ a la mano
   | { type: 'RESOLVE_CARD' } // aplica el efecto liquidable y descarta
   | { type: 'CLAIM_GO_BONUS'; playerId: string } // "si pasa por Salida cobre 200"
   | { type: 'USE_CARD'; playerId: string; cardId: string } // gasta una carta guardada
@@ -1008,20 +1007,6 @@ export function reducer(s: GameState, a: Action): GameState {
         drawnCard: { cardId, playerId: a.playerId },
         log: log(s, `${p.name} sacó ${DECK_LABEL[a.deck]}: ${card ? cardText(card, s.currencySymbol) : cardId}`),
       };
-    }
-
-    case 'TAKE_BONUS': {
-      // Parada Libre: caes en la casilla de Fortuna/Arca y tomas una carta de
-      // Bonificación directo a la mano (no se roba ni se resuelve en el turno).
-      const p = s.players.find((x) => x.id === a.playerId);
-      if (!p || !s.settings.cardPacks.includes('parada-libre')) return s;
-      if (s.decks.bonificacion.draw.length === 0 && s.decks.bonificacion.discard.length === 0) return s;
-      return dealToHand(
-        { ...s, log: log(s, `${p.name} cayó en Fortuna/Arca y tomó una carta ⭐`) },
-        p.id,
-        'bonificacion',
-        1,
-      );
     }
 
     case 'RESOLVE_CARD': {

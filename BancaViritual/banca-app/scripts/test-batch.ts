@@ -128,7 +128,7 @@ gm = setCash(gm, beto, 1000);
 const gm2 = reducer(gm, { type: 'PAY_RENT', fromId: beto, toId: ana, propertyId: 'oriental' });
 ok(gm2.players.find((p) => p.id === beto)!.cash === 1000, 'propiedad hipotecada: no genera renta');
 
-console.log('8) Bonificación: giro no da carta; botón Fortuna/Arca sí');
+console.log('8) Bonificación: girar la ruleta ya no da carta');
 // Partida en modo Parada Libre.
 let gpl = createGame('PL');
 gpl = { ...gpl, settings: { ...gpl.settings, cardPacks: ['base', 'parada-libre'] } };
@@ -145,18 +145,7 @@ const handBeforeSpin = handOf(gpl, anaPl);
 let gplSpun = reducer(gpl, { type: 'SPIN_WHEEL', playerId: anaPl });
 gplSpun = reducer(gplSpun, { type: 'CLOSE_WHEEL' });
 ok(handOf(gplSpun, anaPl) === handBeforeSpin, 'girar la ruleta NO agrega carta de bonificación');
-// El botón Fortuna/Arca sí agrega una carta a la mano.
-const gplBonus = reducer(gpl, { type: 'TAKE_BONUS', playerId: anaPl });
-ok(handOf(gplBonus, anaPl) === handBeforeSpin + 1, 'botón Fortuna/Arca agrega 1 carta ⭐ a la mano');
-// Fuera del modo Parada Libre, TAKE_BONUS no hace nada.
-let gNoPl = createGame('NOPL');
-gNoPl = run(gNoPl,
-  { type: 'ADD_PLAYER', name: 'Ana', admin: true },
-  { type: 'ADD_PLAYER', name: 'Beto' },
-  { type: 'START_GAME' },
-);
-const gNoPl2 = reducer(gNoPl, { type: 'TAKE_BONUS', playerId: gNoPl.players[0].id });
-ok(handOf(gNoPl2, gNoPl.players[0].id) === 0, 'sin Parada Libre, TAKE_BONUS no reparte carta');
+ok(gplSpun.players.find((p) => p.id === anaPl)!.spins === 0, 'girar gasta la ficha de giro');
 
 console.log(`\n${pass} ok, ${fail} fallos`);
 process.exit(fail ? 1 : 0);
