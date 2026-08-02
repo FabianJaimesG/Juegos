@@ -296,9 +296,6 @@
 }
 .deckbtn small { font-size: 0.7rem; opacity: 0.75; font-weight: 700; }
 .deckbtn:disabled { background: #cbd5e1; color: #64748b; cursor: not-allowed; opacity: 0.85; }
-/* Girar la ruleta por caer en la casilla (sustituye a robar Arca/Fortuna). */
-.deckbtn--wheel { background: linear-gradient(135deg, #fde68a, #fbbf24); color: #3f2d00; }
-.deckbtn--wheel:disabled { background: #cbd5e1; color: #64748b; }
 
 .overlay--card { align-items: center; z-index: 20; }
 
@@ -400,6 +397,8 @@
   padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.82rem; font-weight: 700;
 }
 .parada__spin:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Giro por caer en la casilla: no gasta fichas. Se distingue en verde. */
+.parada__spin--free { background: #16a34a; color: #f0fdf4; }
 .parada__claim:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Renta → ficha: selector del dueño que recibe el giro */

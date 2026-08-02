@@ -308,24 +308,7 @@ export default function App() {
               ))}
           </span>
           {state.settings.cardPacks.includes('parada-libre') && (
-            <>
-              {/* Caer en Arca/Fortuna: en esta modalidad no se roban cartas, se
-                  gira la ruleta. Es gratis (no gasta fichas de giro) y solo lo
-                  puede usar el jugador en turno. */}
-              <button
-                className="deckbtn deckbtn--wheel"
-                disabled={!myTurn || turnPlayer.jail > 0}
-                title={
-                  turnPlayer.jail > 0 ? 'En la cárcel no te mueves: no se gira la ruleta'
-                    : myTurn ? 'Caíste en Arca o Fortuna: gira la ruleta sin gastar fichas'
-                      : 'Solo el jugador en turno puede girar'
-                }
-                onClick={() => { setHiddenCard(null); act({ type: 'SPIN_WHEEL', playerId: turnPlayer.id, free: true }); }}
-              >
-                🎡 <small>Caí</small>
-              </button>
-              <RentToSpin state={state} act={act} payer={turnPlayer} canAct={myTurn} />
-            </>
+            <RentToSpin state={state} act={act} payer={turnPlayer} canAct={myTurn} />
           )}
           <span className="turnbar__btns">
             <button onClick={() => act({ type: 'NEXT_TURN' })} disabled={!myTurn} title={myTurn ? '' : 'Solo el jugador en turno puede pasar'}>
@@ -1383,6 +1366,23 @@ function ParadaLibreBar({ state, act, money, me, canControl, revealWheel }: {
           onClick={() => { revealWheel(); act({ type: 'SPIN_WHEEL', playerId: me.id }); }}
         >
           🎡 Girar ({me.spins})
+        </button>
+      )}
+
+      {/* Caer en la casilla de Arca o Fortuna: gira la ruleta SIN gastar fichas.
+          Solo lo puede usar quien tiene el turno (o quien lo controle). */}
+      {turn && (
+        <button
+          className="parada__spin parada__spin--free"
+          disabled={!canAct || turn.jail > 0}
+          title={
+            turn.jail > 0 ? 'En la cárcel no te mueves: no se gira la ruleta'
+              : canAct ? `Caíste en Arca o Fortuna: ${turn.name} gira sin gastar fichas`
+                : `Solo ${turn.name} (el jugador en turno) puede girar`
+          }
+          onClick={() => { revealWheel(); act({ type: 'SPIN_WHEEL', playerId: turn.id, free: true }); }}
+        >
+          🎡 Girar gratis
         </button>
       )}
     </div>
