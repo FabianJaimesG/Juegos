@@ -35,6 +35,15 @@ export function useGame() {
 
   const act = useCallback(
     (action: Action) => {
+      // Empezar la partida corta el historial: deshacer por debajo de este punto
+      // devolvía a TODOS los dispositivos al panel de preparación (el estado
+      // viaja por sync), borrando la partida en curso para todo el mundo.
+      if (action.type === 'START_GAME') {
+        past.current = [];
+        future.current = [];
+        dispatch(action);
+        return;
+      }
       // Guarda snapshot para undo (salvo REPLACE de sync y ops de identidad).
       const skipHistory = action.type === 'REPLACE' || action.type === 'CLAIM_PLAYER' || action.type === 'RELEASE_PLAYER';
       if (!skipHistory) {
@@ -49,6 +58,12 @@ export function useGame() {
   const undo = useCallback(() => {
     const [prev, ...rest] = past.current;
     if (!prev) return;
+    // Cinturón de seguridad: con la partida en curso, deshacer nunca puede
+    // retroceder a un estado sin empezar (volvería a la sala de preparación).
+    if (state.started && !prev.started) {
+      past.current = [];
+      return;
+    }
     past.current = rest;
     future.current = [state, ...future.current];
     dispatch({ type: 'REPLACE', state: prev });
