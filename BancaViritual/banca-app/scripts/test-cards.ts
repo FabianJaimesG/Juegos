@@ -261,6 +261,22 @@ const gWpremio = spinTo({ ...gPL, pot: 500 }, pa, 'w-premio');
 ok(gWpremio.pot === 0 && cashOf(gWpremio, pa) === 2000, 'el Gran Premio vacía el bote');
 const sinFichas = { ...gPL, players: gPL.players.map((p) => ({ ...p, spins: 0 })) };
 ok(reducer(sinFichas, { type: 'SPIN_WHEEL', playerId: pa }) === sinFichas, 'sin fichas no se puede girar');
+
+// Giro gratis: el que se usa al caer en la casilla de Arca/Fortuna.
+const spinFree = (st: GameState, playerId: string, faceId: string): GameState => {
+  const idx = WHEEL.findIndex((f) => f.id === faceId);
+  const real = Math.random;
+  Math.random = () => idx / WHEEL.length;
+  try { return reducer(st, { type: 'SPIN_WHEEL', playerId, free: true }); } finally { Math.random = real; }
+};
+const gFree = spinFree(gPL, pa, 'w-100');
+ok(gFree.players.find((p) => p.id === pa)!.spins === 2, 'el giro gratis no gasta fichas');
+ok(gFree.pot === 100 && cashOf(gFree, pa) === 1400, 'pero sí aplica el efecto de la cara');
+ok(gFree.wheel?.faceId === 'w-100', 'y muestra la cara en pantalla');
+const gFreeSinFichas = spinFree(sinFichas, pa, 'w-premio');
+ok(gFreeSinFichas.wheel?.faceId === 'w-premio', 'se puede girar gratis aunque no queden fichas');
+const enCarcel = { ...gPL, players: gPL.players.map((p) => (p.id === pa ? { ...p, jail: 1 } : p)) };
+ok(reducer(enCarcel, { type: 'SPIN_WHEEL', playerId: pa, free: true }) === enCarcel, 'en la cárcel no se gira ni gratis');
 ok(spinTo(gW, pb, 'w-50') === gW, 'no se gira con una cara sin cerrar');
 
 console.log('18) Pagos al banco → bote (regla de la expansión)');

@@ -308,7 +308,24 @@ export default function App() {
               ))}
           </span>
           {state.settings.cardPacks.includes('parada-libre') && (
-            <RentToSpin state={state} act={act} payer={turnPlayer} canAct={myTurn} />
+            <>
+              {/* Caer en Arca/Fortuna: en esta modalidad no se roban cartas, se
+                  gira la ruleta. Es gratis (no gasta fichas de giro) y solo lo
+                  puede usar el jugador en turno. */}
+              <button
+                className="deckbtn deckbtn--wheel"
+                disabled={!myTurn || turnPlayer.jail > 0}
+                title={
+                  turnPlayer.jail > 0 ? 'En la cárcel no te mueves: no se gira la ruleta'
+                    : myTurn ? 'Caíste en Arca o Fortuna: gira la ruleta sin gastar fichas'
+                      : 'Solo el jugador en turno puede girar'
+                }
+                onClick={() => { setHiddenCard(null); act({ type: 'SPIN_WHEEL', playerId: turnPlayer.id, free: true }); }}
+              >
+                🎡 <small>Caí</small>
+              </button>
+              <RentToSpin state={state} act={act} payer={turnPlayer} canAct={myTurn} />
+            </>
           )}
           <span className="turnbar__btns">
             <button onClick={() => act({ type: 'NEXT_TURN' })} disabled={!myTurn} title={myTurn ? '' : 'Solo el jugador en turno puede pasar'}>

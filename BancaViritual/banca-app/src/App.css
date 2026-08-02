@@ -296,6 +296,9 @@
 }
 .deckbtn small { font-size: 0.7rem; opacity: 0.75; font-weight: 700; }
 .deckbtn:disabled { background: #cbd5e1; color: #64748b; cursor: not-allowed; opacity: 0.85; }
+/* Girar la ruleta por caer en la casilla (sustituye a robar Arca/Fortuna). */
+.deckbtn--wheel { background: linear-gradient(135deg, #fde68a, #fbbf24); color: #3f2d00; }
+.deckbtn--wheel:disabled { background: #cbd5e1; color: #64748b; }
 
 .overlay--card { align-items: center; z-index: 20; }
 
@@ -568,15 +571,15 @@
 /* Dados: más grandes y con tirada visible */
 .turnbar__dice { gap: 0.5rem !important; padding: 0.35rem 0.6rem !important; }
 .die {
-  font-size: 6rem !important; line-height: 1 !important;
+  font-size: 3.1rem !important; line-height: 1 !important;
   filter: drop-shadow(0 2px 2px rgba(0,0,0,.2));
 }
 .die--rolling { animation: bv-tumble 0.4s linear infinite !important; }
-/* Tercer dado (especial): con un fondo que lo distingue. */
+/* Tercer dado (especial): mismo tamaño, con un fondo que lo distingue. */
 .die--special {
-  font-size: 4.6rem !important;
+  font-size: 2.5rem !important;
   background: linear-gradient(135deg, #fef3c7, #fcd34d); border: 2px solid #f59e0b;
-  border-radius: 14px; width: 5.4rem; height: 5.4rem; box-shadow: 0 2px 4px rgba(0,0,0,.18);
+  border-radius: 10px; width: 3rem; height: 3rem; box-shadow: 0 2px 4px rgba(0,0,0,.18);
 }
 .diceroll__die--sp {
   background: linear-gradient(135deg, #fef3c7, #fcd34d); border: 3px solid #f59e0b;

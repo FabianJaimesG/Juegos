@@ -206,7 +206,9 @@ export type Action =
   | { type: 'SET_LIMO'; playerId: string | null } // asignar/quitar la limusina dorada
   | { type: 'SPEND_TOKEN'; playerId: string; token: 'spins'; delta?: number }
   | { type: 'FORCE_SWAP'; aId: string; bId: string; aProp: string; bProp: string }
-  | { type: 'SPIN_WHEEL'; playerId: string } // gasta una ficha y gira la ruleta
+  // Gira la ruleta. Por defecto gasta una ficha de giro; con `free` (caer en la
+  // casilla de Arca/Fortuna) se gira sin gastar ni necesitar fichas.
+  | { type: 'SPIN_WHEEL'; playerId: string; free?: boolean }
   | { type: 'CLOSE_WHEEL' }
   | { type: 'RENT_TO_SPIN'; fromId: string; toId: string } // el jugador en turno paga la renta con una de sus fichas de giro
   | { type: 'LAND_FREE_PARKING'; playerId: string } // caes en la casilla: bote + limusina + tarjeta
@@ -1131,15 +1133,17 @@ export function reducer(s: GameState, a: Action): GameState {
       const p = s.players.find((x) => x.id === a.playerId);
       // Se puede girar mientras queden fichas y no se esté en la cárcel. Un giro
       // nuevo reemplaza el resultado anterior en pantalla (no lo bloquea).
-      if (!p || p.spins <= 0 || p.jail > 0) return s;
+      // El giro gratis (caer en la casilla) no necesita fichas.
+      if (!p || p.jail > 0) return s;
+      if (!a.free && p.spins <= 0) return s;
       const face = WHEEL[Math.floor(Math.random() * WHEEL.length)];
-      // Gasta la ficha de giro y aplica la cara. La carta de bonificación ya no
-      // se gana al girar.
+      // Gasta la ficha de giro (salvo el giro gratis) y aplica la cara. La carta
+      // de bonificación ya no se gana al girar.
       const spun: GameState = {
         ...s,
-        players: mapPlayer(s, p.id, (x) => ({ ...x, spins: x.spins - 1 })),
+        players: a.free ? s.players : mapPlayer(s, p.id, (x) => ({ ...x, spins: x.spins - 1 })),
         wheel: { faceId: face.id, playerId: p.id },
-        log: log(s, `🎡 ${p.name} giró la ruleta: ${wheelText(face, s.currencySymbol)}`),
+        log: log(s, `🎡 ${p.name} ${a.free ? 'cayó en la casilla y giró' : 'giró'} la ruleta: ${wheelText(face, s.currencySymbol)}`),
       };
       const effect = actionFor(spun, face.effect, spun.players.find((x) => x.id === p.id)!);
       return effect ? reducer(spun, effect) : spun;
