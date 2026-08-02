@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { GameState } from './engine';
 
@@ -34,12 +34,19 @@ export function useRealtimeSync(
   applyRef.current = applyRemote;
   const deletedRef = useRef(onDeleted);
   deletedRef.current = onDeleted;
+  // Estado actual sin meterlo en las dependencias del efecto de recuperación.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  // Sala cuya recuperación ya terminó. Hasta entonces NO se publica nada: si no,
+  // el estado recién creado (vacío) pisaba la partida guardada en el servidor.
+  const [loaded, setLoaded] = useState('');
 
   // Suscripción + recuperación inicial cuando cambia la sala.
   useEffect(() => {
     const sb = supabase;
     if (!sb || !code) return;
     let cancelled = false;
+    setLoaded('');
 
     (async () => {
       const { data } = await sb
@@ -47,10 +54,22 @@ export function useRealtimeSync(
         .select('state, origin')
         .eq('code', code)
         .maybeSingle();
-      if (cancelled || !data?.state) return;
-      const js = JSON.stringify(data.state);
-      lastRemote.current = js;
-      if (data.origin !== origin.current) applyRef.current(data.state as GameState);
+      if (cancelled) return;
+      if (data?.state) {
+        const js = JSON.stringify(data.state);
+        lastRemote.current = js;
+        // Al unirse a una sala, el estado local es una partida recién creada y
+        // vacía: hay que adoptar SIEMPRE lo guardado, aunque el último cambio lo
+        // hubiera hecho este mismo dispositivo (volver a una sala propia).
+        // Si en cambio ya hay una partida local en curso (recarga en la misma
+        // sala), se respeta el eco propio para no revivir un estado rezagado.
+        const local = stateRef.current;
+        const localVacio = !local.started && local.players.length === 0;
+        if (localVacio || data.origin !== origin.current) {
+          applyRef.current(data.state as GameState);
+        }
+      }
+      setLoaded(code); // a partir de aquí ya se puede publicar
     })();
 
     const channel = sb
@@ -85,6 +104,7 @@ export function useRealtimeSync(
   useEffect(() => {
     const sb = supabase;
     if (!sb || !code) return;
+    if (loaded !== code) return; // aún recuperando la sala: no pisar lo guardado
     const js = JSON.stringify(state);
     if (js === lastRemote.current) return; // vino de remoto: no reenviar
     const t = setTimeout(() => {
@@ -97,5 +117,5 @@ export function useRealtimeSync(
         });
     }, 300);
     return () => clearTimeout(t);
-  }, [state, code]);
+  }, [state, code, loaded]);
 }

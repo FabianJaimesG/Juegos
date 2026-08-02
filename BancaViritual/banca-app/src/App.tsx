@@ -2155,7 +2155,13 @@ function RoomsBrowser({ currentCode, onJoin }: {
                   <span className="hint"> · 👤 {r.players} · {r.started ? '▶ en juego' : '⏸ preparación'} · {when(r.updatedAt)}</span>
                 </span>
                 <span className="rooms__btns">
-                  <button onClick={() => onJoin(r.code)} disabled={r.code === currentCode}>Unirse</button>
+                  <button
+                    onClick={() => onJoin(r.code)}
+                    disabled={r.code === currentCode}
+                    title={r.started ? 'Vuelve a esta partida en el punto donde quedó' : 'Entra a esta sala'}
+                  >
+                    {r.started ? '▶ Continuar' : 'Unirse'}
+                  </button>
                   <button className="rooms__del" onClick={() => void remove(r.code)} title="Eliminar esta sala">🗑️</button>
                 </span>
               </li>
