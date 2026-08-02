@@ -394,7 +394,8 @@ ok(jailOf(gT2, ana) === 0, `a los ${GAME_CONFIG.jailTurns} turnos sale`);
 ok(cashAntesJ - cashOf(gT2, ana) === GAME_CONFIG.bail, 'pagando la fianza obligatoria');
 
 console.log('25) Terminar la partida y volver a la preparación');
-let gEnd = run(createGame('SALA'),
+const gNueva = createGame('SALA');
+let gEnd = run(gNueva,
   { type: 'ADD_PLAYER', name: 'Ana', admin: true },
   { type: 'ADD_PLAYER', name: 'Beto' },
   { type: 'START_GAME' },
@@ -412,6 +413,12 @@ ok(gBack.players.length === 2, 'y conserva los jugadores');
 ok(gBack.dice === null && gBack.drawnCard === null && gBack.wheel === null && gBack.pendingTrade === null,
   'limpia dados, cartas y negociaciones a medias');
 ok(reducer(gBack, { type: 'END_GAME' }) === gBack, 'terminar dos veces no hace nada');
+// `resetAt` marca el regreso DELIBERADO a la preparación: la sincronización solo
+// propaga un "todos a preparación" cuando esta marca es más nueva que la del
+// servidor, para que deshacer de más no reinicie la partida de todo el mundo.
+ok(gBack.resetAt >= gEnd.resetAt && gBack.resetAt >= Date.now() - 1000, 'END_GAME sella una marca de reinicio nueva');
+ok(gEnd.resetAt === gNueva.resetAt, 'jugar no toca la marca (deshacer no puede reiniciar a todos)');
+ok(createGame('X1').resetAt > 0, 'crear una sala también sella la marca');
 // Se puede volver a empezar: START_GAME repone dinero y mazos.
 const gAgain = reducer(gBack, { type: 'START_GAME' });
 ok(gAgain.started && cashOf(gAgain, ea) === gAgain.settings.initialBalance, 'volver a empezar repone el dinero');

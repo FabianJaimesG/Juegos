@@ -49,12 +49,18 @@ export function useRealtimeSync(
     setLoaded('');
 
     (async () => {
-      const { data } = await sb
+      const { data, error } = await sb
         .from('Room')
         .select('state, origin')
         .eq('code', code)
         .maybeSingle();
       if (cancelled) return;
+      if (error) {
+        // Sin saber qué hay guardado no se publica nada: subir el estado local
+        // podría borrar la partida de la sala.
+        console.warn('[Banca] no se pudo leer la sala:', error.message);
+        return;
+      }
       if (data?.state) {
         const js = JSON.stringify(data.state);
         lastRemote.current = js;
@@ -105,6 +111,21 @@ export function useRealtimeSync(
     const sb = supabase;
     if (!sb || !code) return;
     if (loaded !== code) return; // aún recuperando la sala: no pisar lo guardado
+    // Nunca mandar a TODOS de vuelta a la preparación por accidente (un jugador
+    // que deshace de más, o que vuelve a la pantalla de bienvenida). Solo se
+    // acepta si es un regreso deliberado: crear/reiniciar la sala o terminar la
+    // partida, que sellan `resetAt` con la hora actual.
+    if (!state.started && lastRemote.current) {
+      try {
+        const remoto = JSON.parse(lastRemote.current) as GameState;
+        if (remoto.started && (state.resetAt ?? 0) <= (remoto.resetAt ?? 0)) {
+          console.warn('[Banca] cambio descartado: intentaba devolver la sala a preparación');
+          return;
+        }
+      } catch {
+        /* si no se puede leer el último remoto, se publica igual */
+      }
+    }
     const js = JSON.stringify(state);
     if (js === lastRemote.current) return; // vino de remoto: no reenviar
     const t = setTimeout(() => {

@@ -127,6 +127,13 @@ export interface GameState {
   wheel: { faceId: string; playerId: string } | null;
   /** false = pantalla de preparación; true = partida en curso. */
   started: boolean;
+  /**
+   * Marca de tiempo del último regreso DELIBERADO a la preparación (crear la
+   * sala, reiniciarla o terminar la partida). Sirve para que la sincronización
+   * distinga ese caso de un retroceso accidental: solo se acepta mandar a todos
+   * a la preparación si esta marca es más nueva que la del servidor.
+   */
+  resetAt: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -160,6 +167,7 @@ export function hydrate(s: GameState): GameState {
     wheel: s.wheel ?? null,
     // Estados guardados antes de existir la preparación ya estaban "en curso".
     started: s.started ?? true,
+    resetAt: s.resetAt ?? 0,
     players: (s.players ?? []).map((p) => ({
       ...p,
       admin: p.admin ?? false,
@@ -268,6 +276,7 @@ export function createGame(code: string, currencySymbol = '$'): GameState {
     limoPlayerId: null,
     wheel: null,
     started: false,
+    resetAt: Date.now(),
   };
 }
 
@@ -660,6 +669,7 @@ export function reducer(s: GameState, a: Action): GameState {
         drawnCard: null,
         wheel: null,
         pendingTrade: null,
+        resetAt: Date.now(), // regreso deliberado: la sincronización sí debe propagarlo
         log: log(s, '🏁 Partida terminada: de vuelta a la preparación'),
       };
     }
