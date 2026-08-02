@@ -564,9 +564,19 @@ function SheetContent({
   }
 
   if (sheet.kind === 'props') {
-    // Pagar renta: solo el jugador en turno (o su admin) puede pagar renta a OTRO dueño.
+    // Pagar renta: la paga SIEMPRE el jugador en turno al dueño de este panel.
+    // Puede registrarla ese jugador (o quien lo controle) y también la pantalla
+    // 📺 / un admin 🛡️, que llevan la partida sin representar a nadie.
     const turnPlayer = state.players[state.turnIndex];
-    const canPayRent = !!turnPlayer && !turnPlayer.bankrupt && turnPlayer.jail === 0 && canControl(turnPlayer.id) && turnPlayer.id !== me.id;
+    const turnOk = !!turnPlayer && !turnPlayer.bankrupt && turnPlayer.jail === 0 && turnPlayer.id !== me.id;
+    const canPayRent = turnOk && (canControl(turnPlayer.id) || canEditRules);
+    // Motivo por el que no se ofrece pagar (para no dejar el panel mudo).
+    const rentBlocked = !mine && !canPayRent
+      ? !turnPlayer || turnPlayer.id === me.id ? `${me.name} tiene el turno: nadie le paga renta ahora.`
+        : turnPlayer.bankrupt ? `${turnPlayer.name} está en bancarrota.`
+          : turnPlayer.jail > 0 ? `${turnPlayer.name} está en la cárcel: no cae en propiedades.`
+            : `Solo ${turnPlayer.name} (el jugador en turno) o la pantalla 📺 pueden pagar la renta.`
+      : undefined;
     const diceTotal = state.dice ? state.dice.a + state.dice.b : null;
     return (
       <PropsPanel
@@ -579,6 +589,7 @@ function SheetContent({
         goForceSwap={() => goForceSwap(me.id)}
         onPayRent={canPayRent ? (propertyId) => { act({ type: 'PAY_RENT', fromId: turnPlayer.id, toId: me.id, propertyId }); close(); } : undefined}
         payerName={turnPlayer?.name}
+        rentBlocked={rentBlocked}
         diceTotal={diceTotal}
       />
     );
@@ -733,7 +744,7 @@ function PayForm({
 }
 
 function PropsPanel({
-  me, act, money, readOnly, evenBuild, goMarket, goForceSwap, onPayRent, payerName, diceTotal,
+  me, act, money, readOnly, evenBuild, goMarket, goForceSwap, onPayRent, payerName, rentBlocked, diceTotal,
 }: {
   me: RuntimePlayer;
   act: ReturnType<typeof useGame>['act'];
@@ -744,12 +755,14 @@ function PropsPanel({
   goForceSwap: () => void;
   onPayRent?: (propertyId: string) => void;
   payerName?: string;
+  rentBlocked?: string;
   diceTotal?: number | null;
 }) {
   return (
     <div className="form">
       <h2>Propiedades de {me.name}{readOnly ? ' (solo lectura)' : ''}</h2>
-      {onPayRent && <p className="hint">💸 Como jugador en turno ({payerName}) puedes pagar la renta de una propiedad de {me.name}.</p>}
+      {onPayRent && <p className="hint">💸 {payerName} tiene el turno: pulsa «Pagar renta» bajo la propiedad donde cayó. Se le descuenta a {payerName} y se le abona a {me.name}.</p>}
+      {rentBlocked && <p className="hint">💸 {rentBlocked}</p>}
       <div className="wealth">
         <span>💵 {money(me.cash)}</span>
         <span>🏦 {money(playerEquity(me))} en bienes</span>
